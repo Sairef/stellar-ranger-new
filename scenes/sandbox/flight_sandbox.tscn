@@ -1,0 +1,157 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://src/world/space_sky.gdshader" id="1_sky"]
+[ext_resource type="PackedScene" path="res://src/world/asteroid.tscn" id="2_asteroid"]
+[ext_resource type="PackedScene" path="res://src/ships/ship.tscn" id="3_ship"]
+[ext_resource type="Script" path="res://src/ships/npc_routine.gd" id="4_routine"]
+[ext_resource type="Script" path="res://src/player/player_controller.gd" id="5_controller"]
+[ext_resource type="Script" path="res://src/player/orbit_camera.gd" id="6_camera"]
+[ext_resource type="Script" path="res://src/debug/nav_debug_draw.gd" id="7_debug"]
+[ext_resource type="Script" path="res://src/ui/hud.gd" id="8_hud"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
+shader = ExtResource("1_sky")
+
+[sub_resource type="Sky" id="Sky_space"]
+sky_material = SubResource("ShaderMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_space"]
+background_mode = 2
+sky = SubResource("Sky_space")
+ambient_light_source = 2
+ambient_light_color = Color(0.35, 0.4, 0.55, 1)
+ambient_light_energy = 0.35
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="FlightSandbox" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_space")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.7, 0.9, 0)
+light_energy = 1.4
+shadow_enabled = true
+directional_shadow_max_distance = 3000.0
+
+[node name="Asteroids" type="Node3D" parent="."]
+
+[node name="AsteroidA" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(-700, 0, 0)
+display_name = "Asteroid A"
+radius = 35.0
+shape_seed = 1
+
+[node name="AsteroidB" parent="Asteroids" instance=ExtResource("2_asteroid")]
+display_name = "Asteroid B (big)"
+radius = 90.0
+shape_seed = 2
+rock_color = Color(0.5, 0.42, 0.36, 1)
+
+[node name="AsteroidC" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(700, 0, 0)
+display_name = "Asteroid C"
+radius = 35.0
+shape_seed = 3
+
+[node name="AsteroidD" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(-200, 30, -400)
+display_name = "Asteroid D"
+radius = 30.0
+shape_seed = 4
+
+[node name="AsteroidE" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(250, -20, 380)
+display_name = "Asteroid E"
+radius = 45.0
+shape_seed = 5
+
+[node name="AsteroidF" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(120, 90, -520)
+display_name = "Asteroid F"
+radius = 25.0
+shape_seed = 6
+
+[node name="AsteroidG" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(-420, -60, 300)
+display_name = "Asteroid G"
+radius = 40.0
+shape_seed = 7
+
+[node name="AsteroidH" parent="Asteroids" instance=ExtResource("2_asteroid")]
+position = Vector3(480, 50, -250)
+display_name = "Asteroid H"
+radius = 28.0
+shape_seed = 8
+
+[node name="Ships" type="Node3D" parent="."]
+
+[node name="PlayerShip" parent="Ships" instance=ExtResource("3_ship")]
+position = Vector3(-610, 0, 0)
+rotation = Vector3(0, -1.5708, 0)
+display_name = "You"
+hull_color = Color(0.3, 0.75, 1, 1)
+
+[node name="Patrol1" parent="Ships" instance=ExtResource("3_ship")]
+position = Vector3(620, 0, 30)
+rotation = Vector3(0, 1.5708, 0)
+display_name = "Patrol 1"
+hull_color = Color(0.45, 0.9, 0.45, 1)
+
+[node name="Routine" type="Node" parent="Ships/Patrol1"]
+script = ExtResource("4_routine")
+waypoints = Array[NodePath]([NodePath("../../../Asteroids/AsteroidA"), NodePath("../../../Asteroids/AsteroidC")])
+
+[node name="Patrol2" parent="Ships" instance=ExtResource("3_ship")]
+position = Vector3(-650, 40, -80)
+rotation = Vector3(0, -1.5708, 0)
+display_name = "Patrol 2"
+hull_color = Color(0.45, 0.9, 0.45, 1)
+
+[node name="Routine" type="Node" parent="Ships/Patrol2"]
+script = ExtResource("4_routine")
+waypoints = Array[NodePath]([NodePath("../../../Asteroids/AsteroidC"), NodePath("../../../Asteroids/AsteroidA")])
+
+[node name="Trader" parent="Ships" instance=ExtResource("3_ship")]
+position = Vector3(-180, 30, -330)
+display_name = "Trader"
+hull_color = Color(0.8, 0.6, 1, 1)
+max_speed = 80.0
+acceleration = 25.0
+turn_rate = 1.0
+
+[node name="Routine" type="Node" parent="Ships/Trader"]
+script = ExtResource("4_routine")
+waypoints = Array[NodePath]([NodePath("../../../Asteroids/AsteroidE"), NodePath("../../../Asteroids/AsteroidD")])
+
+[node name="Orbiter" parent="Ships" instance=ExtResource("3_ship")]
+position = Vector3(0, 0, 220)
+display_name = "Orbiter"
+hull_color = Color(1, 0.6, 0.3, 1)
+
+[node name="Routine" type="Node" parent="Ships/Orbiter"]
+script = ExtResource("4_routine")
+mode = 1
+waypoints = Array[NodePath]([NodePath("../../../Asteroids/AsteroidB")])
+distance = 100.0
+
+[node name="PlayerController" type="Node" parent="." node_paths=PackedStringArray("ship", "camera")]
+script = ExtResource("5_controller")
+ship = NodePath("../Ships/PlayerShip")
+camera = NodePath("../Camera")
+
+[node name="Camera" type="Camera3D" parent="." node_paths=PackedStringArray("target")]
+near = 0.5
+far = 20000.0
+current = true
+script = ExtResource("6_camera")
+target = NodePath("../Ships/PlayerShip")
+
+[node name="NavDebugDraw" type="MeshInstance3D" parent="."]
+script = ExtResource("7_debug")
+
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("controller", "debug_draw")]
+script = ExtResource("8_hud")
+controller = NodePath("../PlayerController")
+debug_draw = NodePath("../NavDebugDraw")

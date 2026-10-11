@@ -108,7 +108,7 @@ Includes:
 Not included yet: multiple systems, full economy, skills, ship fitting UI, station ownership, escape pods.
 
 Draft step order:
-1. A ship in 3D space that moves by commands (move to / approach / orbit / stop), plus camera. Ships fly around obstacles (asteroids) and avoid colliding with each other.
+1. ✅ A ship in 3D space that moves by commands (move to / approach / orbit / stop), plus camera. Ships fly around obstacles (asteroids) and avoid colliding with each other. Covered by `tests/nav_scenarios.tscn`. Known limit: dense asteroid fields will need real path planning.
 2. Static world: station, asteroids, gate.
 3. NPC routines (miner, trader, patrol) using the same order system.
 4. Combat: weapons, health, destruction, wrecks.
