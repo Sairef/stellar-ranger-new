@@ -16,7 +16,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-MCPGameBridge="res://addons/godot_mcp/game_bridge/mcp_game_bridge.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
 
@@ -25,14 +25,7 @@ window/stretch/aspect="expand"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/godot_mcp/plugin.cfg")
-
-[godot_mcp]
-
-bind_mode=0
-custom_bind_ip=""
-port_override_enabled=false
-port_override=6550
+enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 [physics]
 
