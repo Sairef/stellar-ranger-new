@@ -71,9 +71,14 @@ var armor := 0.0
 var cargo := 0.0
 ## Point (Vector3) the work beam (e.g. mining laser) is aimed at, or null when it is off.
 var beam_target: Variant = null
-## Station the ship is docked at, and through which corridor it came in.
-var docked_at: SpaceBody = null
+## Station the ship is docked at (null when not docked, or if the station is gone),
+## and through which corridor it came in.
+var docked_at: SpaceBody:
+	get:
+		return _dock.resolve() as SpaceBody if _dock != null else null
 var dock_corridor := -1
+## Stable id in the World registry (0 until registered). Refer to ships with ObjectRef.
+var object_id := 0
 ## Last autopilot output, kept for UI and debug drawing.
 var desired_velocity := Vector3.ZERO
 var has_goal := false
@@ -83,12 +88,24 @@ var collision_ticks := 0
 
 var _face_point: Variant = null
 var _gone := false
+var _docked := false
+var _dock: ObjectRef = null
 var _collision_layer := 1
 var _collision_mask := 1
 var _engine_glow: Node3D
 var _beam: MeshInstance3D
 var _beam_material: StandardMaterial3D
 var _label: Label3D
+
+
+func _enter_tree() -> void:
+	if not Engine.is_editor_hint():
+		World.register(self)
+
+
+func _exit_tree() -> void:
+	if not Engine.is_editor_hint():
+		World.unregister(self)
 
 
 func _ready() -> void:
@@ -121,7 +138,7 @@ func get_forward() -> Vector3:
 
 
 func is_docked() -> bool:
-	return docked_at != null
+	return _docked
 
 
 ## Adds the ship to `parent` already at `where` (global). Placing it after adding would put it
@@ -135,7 +152,7 @@ func enter_space(parent: Node, where: Transform3D) -> void:
 
 ## Out in space and still in one piece: can fly, shoot and be shot.
 func is_in_space() -> bool:
-	return not _gone and docked_at == null and is_inside_tree()
+	return not _gone and not _docked and is_inside_tree()
 
 
 func is_hostile_to(other: Ship) -> bool:
@@ -186,7 +203,7 @@ func _destroy() -> void:
 
 
 func get_order_label() -> String:
-	if docked_at != null:
+	if _docked:
 		return "Docked at %s" % Autopilot.name_of(docked_at)
 	if current_order != null:
 		return current_order.get_label()
@@ -198,7 +215,8 @@ func get_order_label() -> String:
 ## Called by DockOrder when the ship reaches the inner end of a docking corridor.
 func dock(station: SpaceBody, corridor: int) -> void:
 	station.release_corridor(corridor, self)
-	docked_at = station
+	_docked = true
+	_dock = ObjectRef.to(station)
 	dock_corridor = corridor
 	give_order(null)
 	_set_in_space(false)
@@ -214,14 +232,15 @@ func dock_instantly(station: SpaceBody, corridor := 0) -> void:
 ## Leaves the station through the corridor the ship came in by.
 ## Returns false if that corridor is busy right now; try again later.
 func try_undock() -> bool:
-	if docked_at == null:
-		return false
 	var station := docked_at
+	if station == null:
+		return false
 	var order := LeaveOrder.new(station, dock_corridor)
 	if not station.try_reserve_corridor(dock_corridor, self, order):
 		return false
 	var points := station.get_corridor(dock_corridor)
-	docked_at = null
+	_docked = false
+	_dock = null
 	global_position = points["inner"]
 	look_at(points["outer"], Vector3.UP)
 	reset_physics_interpolation()
@@ -242,6 +261,14 @@ func jump_out(gate: Gate, corridor: int) -> void:
 	queue_free()
 
 
+## Removes the ship without a trace (no wreck), e.g. along with the station it was docked in.
+func _vanish() -> void:
+	_gone = true
+	give_order(null)
+	_set_in_space(false)
+	queue_free()
+
+
 func _set_in_space(present: bool) -> void:
 	visible = present
 	speed = 0.0 if not present else speed
@@ -259,11 +286,15 @@ func _set_in_space(present: bool) -> void:
 # --- Flight ----------------------------------------------------------------------------------
 
 func _physics_process(delta: float) -> void:
-	if Engine.is_editor_hint() or _gone or docked_at != null:
+	if Engine.is_editor_hint() or _gone:
+		return
+	if _docked:
+		if docked_at == null:
+			_vanish()  # The station is gone, and the ship was inside it.
 		return
 	if current_order != null:
 		current_order.update(self, delta)
-	if _gone or docked_at != null:
+	if _gone or _docked:
 		return  # The order docked the ship or jumped it out.
 	if current_order != null and current_order.is_complete(self):
 		give_order(null)

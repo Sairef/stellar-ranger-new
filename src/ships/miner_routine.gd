@@ -21,13 +21,13 @@ enum Step { GO_TO_ROCK, MINE, GO_HOME }
 ## Seconds until the ship undocks (while docked).
 var undock_in := 0.0
 
-## Rock -> miner currently working it.
+## Rock id -> id of the miner ship working it.
 static var _claimed_rocks := {}
 
 var _ship: Ship
 var _rng := RandomNumberGenerator.new()
 var _step := Step.GO_TO_ROCK
-var _rock: Asteroid = null
+var _rock := ObjectRef.new()
 
 
 func _ready() -> void:
@@ -49,8 +49,10 @@ func _exit_tree() -> void:
 
 
 func _start_docked() -> void:
-	_ship.dock_instantly(get_node(home))
-	undock_in = start_docked_for
+	var station := get_node_or_null(home) as SpaceBody
+	if station != null:
+		_ship.dock_instantly(station)
+		undock_in = start_docked_for
 
 
 func _physics_process(delta: float) -> void:
@@ -64,19 +66,24 @@ func _physics_process(delta: float) -> void:
 
 	match _step:
 		Step.GO_TO_ROCK:
-			_rock = _claim_rock()
-			if _rock == null:
+			var rock := _claim_rock()
+			if rock == null:
 				_step = Step.GO_HOME
 				return
-			_ship.give_order(ApproachOrder.new(_rock, mining_distance, true))
+			_rock = ObjectRef.to(rock)
+			_ship.give_order(ApproachOrder.new(rock, mining_distance, true))
 			_step = Step.MINE
 		Step.MINE:
 			_step = Step.GO_HOME
-			if is_instance_valid(_rock) and _ship.cargo < _ship.cargo_capacity:
-				_ship.give_order(MineOrder.new(_rock, mining_distance))
+			var rock := _rock.resolve()
+			if rock != null and _ship.cargo < _ship.cargo_capacity:
+				_ship.give_order(MineOrder.new(rock, mining_distance))
 		Step.GO_HOME:
 			_release_rock()
-			_ship.give_order(DockOrder.new(get_node(home)))
+			var station := get_node_or_null(home) as SpaceBody
+			if station == null:
+				return  # No home any more: nowhere to unload, so the miner just waits.
+			_ship.give_order(DockOrder.new(station))
 			_step = Step.GO_TO_ROCK
 
 
@@ -91,18 +98,19 @@ func _claim_rock() -> Asteroid:
 	if area == null:
 		return null
 	var free_rocks: Array[Asteroid] = []
+	var me := World.id_of(_ship)
 	for rock in area.get_rocks():
-		var miner = _claimed_rocks.get(rock)
-		if miner == null or not is_instance_valid(miner) or miner == self:
+		var miner: int = _claimed_rocks.get(World.id_of(rock), 0)
+		if miner == 0 or miner == me or World.find(miner) == null:
 			free_rocks.append(rock)
 	if free_rocks.is_empty():
 		return null
 	var rock := free_rocks[_rng.randi() % free_rocks.size()]
-	_claimed_rocks[rock] = self
+	_claimed_rocks[World.id_of(rock)] = me
 	return rock
 
 
 func _release_rock() -> void:
-	if _rock != null and _claimed_rocks.get(_rock) == self:
-		_claimed_rocks.erase(_rock)
-	_rock = null
+	if _rock.is_set() and _claimed_rocks.get(_rock.id, 0) == _ship.object_id:
+		_claimed_rocks.erase(_rock.id)
+	_rock = ObjectRef.new()

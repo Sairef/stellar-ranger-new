@@ -29,8 +29,21 @@ extends StaticBody3D
 		show_label = value
 		_queue_rebuild()
 
-## Corridor lock key -> {ship, order} of the current user.
+## Stable id in the World registry (0 until registered). Refer to bodies with ObjectRef.
+var object_id := 0
+
+## Corridor lock key -> {ship: ObjectRef, order} of the current user.
 var _corridor_locks := {}
+
+
+func _enter_tree() -> void:
+	if not Engine.is_editor_hint():
+		World.register(self)
+
+
+func _exit_tree() -> void:
+	if not Engine.is_editor_hint():
+		World.unregister(self)
 
 
 func _ready() -> void:
@@ -92,18 +105,18 @@ func nearest_corridor(point: Vector3) -> int:
 func try_reserve_corridor(index: int, ship: Ship, order: ShipOrder) -> bool:
 	var key := _lock_key(index)
 	var lock: Dictionary = _corridor_locks.get(key, {})
-	if not lock.is_empty() and lock["ship"] != ship:
-		var owner_ship = lock["ship"]
-		if is_instance_valid(owner_ship) and owner_ship.current_order == lock["order"]:
+	if not lock.is_empty() and not (lock["ship"] as ObjectRef).points_to(ship):
+		var owner_ship := (lock["ship"] as ObjectRef).resolve() as Ship
+		if owner_ship != null and owner_ship.current_order == lock["order"]:
 			return false
-	_corridor_locks[key] = {"ship": ship, "order": order}
+	_corridor_locks[key] = {"ship": ObjectRef.to(ship), "order": order}
 	return true
 
 
 func release_corridor(index: int, ship: Ship) -> void:
 	var key := _lock_key(index)
 	var lock: Dictionary = _corridor_locks.get(key, {})
-	if not lock.is_empty() and lock["ship"] == ship:
+	if not lock.is_empty() and (lock["ship"] as ObjectRef).points_to(ship):
 		_corridor_locks.erase(key)
 
 

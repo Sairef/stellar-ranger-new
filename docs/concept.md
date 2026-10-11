@@ -80,6 +80,7 @@ Every system in the first milestone exists to make this scene possible.
 - **Engine:** Godot 4.7, Jolt physics, GDScript.
 - **Simulation is separate from presentation.** The galaxy is data updated in ticks. Only the system the player is in is rendered in 3D; other systems are simulated at lower fidelity. The simulation can run without graphics, be fast-forwarded and be tested automatically.
 - **One order system** shared by the player and the AI (see Control model).
+- **World objects have stable ids.** Anything can vanish (destroyed, jumped out, mined out), so long-lived references (order targets, the selection, locks) store ids and resolve them when needed. The same ids are what save games and the off-screen simulation of other systems will refer to. A chaos test removes random objects at random moments to keep this honest.
 
 ## Open questions
 

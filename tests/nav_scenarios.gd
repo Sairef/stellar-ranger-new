@@ -8,6 +8,7 @@ extends Node
 ## Set the environment variable NAV_DIAG=1 to also print every physical contact (what hit what),
 ## near misses between ships and every order change in the traffic scenarios.
 
+const ErrorLog := preload("res://tests/support/error_log.gd")
 const ShipScene := preload("res://src/ships/ship.tscn")
 const AsteroidScene := preload("res://src/world/asteroid.tscn")
 const StationScene := preload("res://src/world/station.tscn")
@@ -18,11 +19,13 @@ const GateScene := preload("res://src/world/gate.tscn")
 const MIN_GAP := 1.0
 
 var _world: Node3D
+var _errors := ErrorLog.new()
 var _passed := 0
 var _failed := 0
 
 
 func _ready() -> void:
+	OS.add_logger(_errors)
 	await _detour_around_big_asteroid(Vector3.ZERO)
 	await _detour_around_big_asteroid(Vector3(0, 12, 0))
 	await _detour_around_big_asteroid(Vector3(0, 0, -25))
@@ -43,6 +46,7 @@ func _ready() -> void:
 	await _target_leaves_the_system()
 	await _miner_cycle()
 	await _home_system_soak()
+	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 

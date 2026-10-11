@@ -8,20 +8,31 @@ extends Node
 ## or fly to that point on the ship's horizontal plane if there is nothing there.
 ## Q: approach selected, W: orbit selected, E: attack selected ship, Space: stop.
 ## The object under the cursor gets a faint ring (`hovered`), so it is clear what a click selects.
-## The player's ship can be destroyed: then `ship` is gone until someone assigns a new one.
+## The ship, the selection and the hovered object are kept as ObjectRefs: once one of them is
+## gone (destroyed, jumped out), it simply reads as null.
 
 signal selection_changed(target: Node3D)
 
-@export var ship: Ship
+## The player's ship, or null while there is none (e.g. destroyed).
+@export var ship: Ship:
+	get:
+		return _ship.resolve() as Ship if _ship != null else null
+	set(value):
+		_ship = ObjectRef.to(value)
 @export var camera: Camera3D
 ## Distance from the target's surface for the Approach command, in meters.
 @export var approach_distance := 50.0
 ## Distance from the target's surface for the Orbit command, in meters.
 @export var orbit_distance := 100.0
 
-var selected: Node3D = null
+## The selected object, or null.
+var selected: Node3D:
+	get:
+		return _selected.resolve()
 ## Object under the mouse cursor right now, or null.
-var hovered: Node3D = null
+var hovered: Node3D:
+	get:
+		return _hovered.resolve()
 
 ## Mouse travel (px) after which a press counts as a drag, not a click.
 const CLICK_SLOP := 6.0
@@ -34,6 +45,9 @@ const MIN_RING_PIXELS := 28.0
 ## Longest move order from a double click, in meters.
 const MAX_MOVE_DISTANCE := 5000.0
 
+var _ship: ObjectRef = null
+var _selected := ObjectRef.new()
+var _hovered := ObjectRef.new()
 var _press_position := Vector2.ZERO
 var _marker: Sprite3D
 var _hover_marker: Sprite3D
@@ -71,35 +85,38 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(_delta: float) -> void:
-	# The selection may have been freed (destroyed, jumped out). A freed object compares equal
-	# to null, so `selected != null` cannot tell; is_same() can.
-	if not is_same(selected, null) and not is_instance_valid(selected):
-		select(null)
-	hovered = pick(get_viewport().get_mouse_position())
-	_place_ring(_marker, selected)
-	_place_ring(_hover_marker, hovered if hovered != selected else null)
+	# The selected object vanished (destroyed, jumped out): tell listeners it is cleared.
+	if _selected.is_set() and selected == null:
+		_selected = ObjectRef.new()
+		selection_changed.emit(null)
+	_hovered = ObjectRef.to(pick(get_viewport().get_mouse_position()))
+	var current := selected
+	var hover := hovered
+	_place_ring(_marker, current)
+	_place_ring(_hover_marker, hover if hover != current else null)
 
 
 func select(target: Node3D) -> void:
-	if target == ship:
+	if target != null and target == ship:
 		target = null
-	if is_same(target, selected):
+	if target == selected:
 		return
-	selected = target
-	selection_changed.emit(selected)
+	_selected = ObjectRef.to(target)
+	selection_changed.emit(target)
 
 
 func has_ship() -> bool:
-	return is_instance_valid(ship) and ship.is_in_space()
+	var own := ship
+	return own != null and own.is_in_space()
 
 
 func approach_selected() -> void:
-	if has_ship() and is_instance_valid(selected):
+	if has_ship() and selected != null:
 		ship.give_order(ApproachOrder.new(selected, approach_distance))
 
 
 func orbit_selected() -> void:
-	if has_ship() and is_instance_valid(selected):
+	if has_ship() and selected != null:
 		ship.give_order(OrbitOrder.new(selected, orbit_distance))
 
 
@@ -109,7 +126,7 @@ func attack_selected() -> void:
 
 
 func can_attack_selected() -> bool:
-	return is_instance_valid(selected) and selected is Ship
+	return selected is Ship
 
 
 func stop() -> void:
@@ -173,10 +190,9 @@ func _on_double_click(screen_position: Vector2) -> void:
 
 
 ## Puts a ring around `target` (or hides it), at least MIN_RING_PIXELS wide on screen.
-## Untyped `target`: it may be a freed object, and a typed parameter would fail on the call.
-func _place_ring(ring: Sprite3D, target: Variant) -> void:
-	ring.visible = is_instance_valid(target)
-	if not ring.visible:
+func _place_ring(ring: Sprite3D, target: Node3D) -> void:
+	ring.visible = target != null
+	if target == null:
 		return
 	ring.global_position = target.get_global_transform_interpolated().origin
 	var world_size := Autopilot.radius_of(target) * 2.6

@@ -3,14 +3,17 @@ extends Node
 ## Headless checks for OrbitCamera keyboard controls. Run from the project folder:
 ##   godot --headless --path . --fixed-fps 60 res://tests/camera_checks.tscn
 
+const ErrorLog := preload("res://tests/support/error_log.gd")
 const STEP := deg_to_rad(OrbitCamera.STEP_DEGREES)
 const EPSILON := 0.0001
 
+var _errors := ErrorLog.new()
 var _passed := 0
 var _failed := 0
 
 
 func _ready() -> void:
+	OS.add_logger(_errors)
 	var camera := OrbitCamera.new()
 	add_child(camera)
 
@@ -50,6 +53,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 	_check(is_equal_approx(camera.yaw, yaw), "rotation stops when the arrow is released")
 
+	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 

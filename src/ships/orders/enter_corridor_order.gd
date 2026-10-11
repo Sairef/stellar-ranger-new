@@ -15,13 +15,18 @@ const INSIDE_REACHED := 6.0
 ## Speed limit inside corridors, m/s.
 const CORRIDOR_SPEED := 40.0
 
-var structure: SpaceBody
+## The live structure, or null once it is gone (then the order ends).
+var structure: SpaceBody:
+	get:
+		return _structure.resolve() as SpaceBody
 var phase := Phase.TO_HOLD
 var corridor := -1
 
+var _structure: ObjectRef
+
 
 func _init(p_structure: SpaceBody) -> void:
-	structure = p_structure
+	_structure = ObjectRef.to(p_structure)
 
 
 func get_target() -> Node3D:
@@ -29,37 +34,39 @@ func get_target() -> Node3D:
 
 
 func update(ship: Ship, _delta: float) -> void:
-	if not is_instance_valid(structure):
+	var body := structure
+	if body == null:
 		phase = Phase.DONE
 		return
 	if corridor < 0:
-		corridor = structure.nearest_corridor(ship.global_position)
-	var points := structure.get_corridor(corridor)
+		corridor = body.nearest_corridor(ship.global_position)
+	var points := body.get_corridor(corridor)
 	if phase == Phase.TO_HOLD and ship.global_position.distance_to(points["hold"]) < HOLD_REACHED:
 		phase = Phase.WAITING
-	if phase == Phase.WAITING and structure.try_reserve_corridor(corridor, ship, self):
+	if phase == Phase.WAITING and body.try_reserve_corridor(corridor, ship, self):
 		phase = Phase.ENTERING
 	if phase == Phase.ENTERING and ship.global_position.distance_to(points["inner"]) < INSIDE_REACHED:
 		phase = Phase.DONE
-		_on_inside(ship)
+		_on_inside(ship, body)
 
 
 func get_goal(_ship: Ship) -> NavGoal:
-	if phase == Phase.DONE or corridor < 0:
+	var body := structure
+	if body == null or phase == Phase.DONE or corridor < 0:
 		return null
-	var points := structure.get_corridor(corridor)
+	var points := body.get_corridor(corridor)
 	if phase == Phase.ENTERING:
 		# Inside the corridor the structure is not an obstacle: the corridor is known to be clear.
-		return NavGoal.new(points["inner"], true, structure, CORRIDOR_SPEED)
+		return NavGoal.new(points["inner"], true, body, CORRIDOR_SPEED)
 	return NavGoal.new(points["hold"])
 
 
 func is_complete(_ship: Ship) -> bool:
-	return phase == Phase.DONE
+	return phase == Phase.DONE or structure == null
 
 
 ## Override: the ship has reached the inner end of the corridor (which it still holds).
-func _on_inside(_ship: Ship) -> void:
+func _on_inside(_ship: Ship, _body: SpaceBody) -> void:
 	pass
 
 

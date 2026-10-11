@@ -69,6 +69,8 @@ func get_trader_count() -> int:
 func _spawn_initial() -> void:
 	for i in initial_traders:
 		var station := _random_node(stations) as SpaceBody
+		if station == null:
+			return
 		var corridor := _rng.randi() % station.get_corridor_count()
 		var ship := _create_trader()
 		ship.enter_space(_root, Transform3D(Basis.IDENTITY, station.get_corridor(corridor)["inner"]))
@@ -97,15 +99,23 @@ func _create_trader() -> Ship:
 	return ship
 
 
+## A random node out of `paths` that still exists, or null.
 func _random_node(paths: Array[NodePath]) -> Node:
-	if paths.is_empty():
+	var nodes: Array[Node] = []
+	for path in paths:
+		var node := get_node_or_null(path)
+		if node != null:
+			nodes.append(node)
+	if nodes.is_empty():
 		return null
-	return get_node(paths[_rng.randi() % paths.size()])
+	return nodes[_rng.randi() % nodes.size()]
 
 
-## Routines live deep inside ships, so they get absolute paths.
+## Routines live deep inside ships, so they get absolute paths. Places that are gone are skipped.
 func _absolute(paths: Array[NodePath]) -> Array[NodePath]:
 	var result: Array[NodePath] = []
 	for path in paths:
-		result.append(get_node(path).get_path())
+		var node := get_node_or_null(path)
+		if node != null:
+			result.append(node.get_path())
 	return result

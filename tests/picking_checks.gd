@@ -4,15 +4,18 @@ extends Node
 ## Run from the project folder:
 ##   godot --headless --path . --fixed-fps 60 res://tests/picking_checks.tscn
 
+const ErrorLog := preload("res://tests/support/error_log.gd")
 const ShipScene := preload("res://src/ships/ship.tscn")
 const GateScene := preload("res://src/world/gate.tscn")
 const StationScene := preload("res://src/world/station.tscn")
 
+var _errors := ErrorLog.new()
 var _passed := 0
 var _failed := 0
 
 
 func _ready() -> void:
+	OS.add_logger(_errors)
 	# The camera sits at the origin looking down -Z.
 	var camera := Camera3D.new()
 	camera.far = 60000.0
@@ -54,6 +57,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 	_check(is_same(controller.selected, null), "a destroyed selection is cleared (%s)" % controller.selected)
 
+	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 

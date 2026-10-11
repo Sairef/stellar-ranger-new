@@ -7,6 +7,7 @@ design pillars and milestone plan are in `docs/concept.md` — read it before de
 
 ## Layout
 
+- `src/core/` — `WorldRegistry` (the `World` autoload: ids of world objects) and `ObjectRef`.
 - `src/ships/` — `Ship` (flight model, docking, jumping, shield/armor), `Autopilot`
   (obstacle/traffic avoidance), NPC brains (`NpcRoutine` for patrols/orbits, `TraderRoutine`,
   `MinerRoutine`, `CombatRoutine`), `TrafficSpawner` (traders arriving through gates).
@@ -23,7 +24,7 @@ design pillars and milestone plan are in `docs/concept.md` — read it before de
 - `scenes/systems/home_system.tscn` — main scene: the first star system.
 - `scenes/sandbox/flight_sandbox.tscn` — a small test bed for flight and navigation.
 - `scenes/sandbox/combat_sandbox.tscn` — combat test bed: the player, a pirate, debug buttons.
-- `tests/` — headless scenario tests.
+- `tests/` — headless scenario tests; `tests/support/` — shared test helpers.
 
 ## Tests
 
@@ -36,18 +37,25 @@ D:/Godot/Godot_v4.7.2-stable_win64_console.exe --headless --path . --fixed-fps 6
 Exit code 0 means all scenarios passed. Run `--headless --path . --import` first if new
 `class_name` scripts were added while the editor was closed. Camera controls have their own
 checks in `res://tests/camera_checks.tscn`, mouse picking in `res://tests/picking_checks.tscn`
-and combat in `res://tests/combat_checks.tscn` (same command). Spawn ships with
+combat in `res://tests/combat_checks.tscn`, and `res://tests/chaos_checks.tscn` removes random
+world objects at random moments while the home system runs (same command). Every suite fails
+on any error logged during the run (`tests/support/error_log.gd`). Spawn ships with
 `Ship.enter_space()`, not add_child + move: physics may push apart bodies that briefly overlap.
 
-## Freed objects (ships die, jump out)
+## World objects and references
 
-Any reference to a ship, a selection or an order target may point to a freed object.
-- A freed object compares equal to `null`: use `is_instance_valid()` to test it, and
-  `is_same()` when "nothing" must be told apart from "freed".
-- Passing a freed object to a typed parameter (`func f(node: Node)`) fails on the call itself,
-  before any check inside. Helpers that may receive one take `Variant` and check validity
-  (`Autopilot.name_of()`, `radius_of()`).
-- Lambdas must not capture ships that may be freed; track them through signals.
+Ships, stations, gates, rocks and wrecks (later pods, loot) can vanish at any moment. Each has a
+stable `object_id` in the `World` registry (`src/core/world_registry.gd`).
+- Anything that keeps a reference to a world object longer than one frame stores an `ObjectRef`
+  (`ObjectRef.to(node)`), never the node, and calls `resolve()` when it needs the object. That
+  returns the live object or null, never a freed one. Expose it as a property with a getter
+  (see `ApproachOrder.target`, `PlayerController.selected`), so callers just read a node or null.
+- A raw node reference is fine within one frame: taken from a group, the registry or a resolve().
+- Why: a freed object compares equal to `null`, and passing one to a typed parameter fails on the
+  call itself. Ids are also what save games and off-screen simulation will need.
+- New world object types: add `object_id` and register in `_enter_tree`/`_exit_tree` (see
+  `SpaceBody`, `Ship`), then cover them in `tests/chaos_checks.gd`.
+- Lambdas must not capture nodes that may vanish; track them through signals.
 
 ## Driving the running game (godot-ai MCP)
 

@@ -19,15 +19,19 @@ const TILT_STEP := 10.0
 ## Directions tried when no tilted plane is clear.
 const SPHERE_SAMPLES := 64
 
-var target: Node3D
+## The live target, or null once it is gone (then the order ends).
+var target: Node3D:
+	get:
+		return _target.resolve()
 ## Desired gap between the ship's hull and the target's surface, in meters.
 var distance: float
 
+var _target: ObjectRef
 var _normal := Vector3.ZERO
 
 
 func _init(p_target: Node3D, p_distance := 100.0) -> void:
-	target = p_target
+	_target = ObjectRef.to(p_target)
 	distance = p_distance
 
 
@@ -40,9 +44,12 @@ func get_target() -> Node3D:
 
 
 func get_goal(ship: Ship) -> NavGoal:
-	var center := target.global_position
+	var node := target
+	if node == null:
+		return null
+	var center := node.global_position
 	var offset := ship.global_position - center
-	var orbit_radius := Autopilot.radius_of(target) + ship.radius + distance
+	var orbit_radius := Autopilot.radius_of(node) + ship.radius + distance
 	var obstacles := ship.get_tree().get_nodes_in_group(Autopilot.OBSTACLE_GROUP)
 	if _normal == Vector3.ZERO or _clearance(_normal, center, orbit_radius, ship, obstacles) < 0.0:
 		_normal = _pick_normal(ship, center, offset, orbit_radius, obstacles)
@@ -57,11 +64,11 @@ func get_goal(ship: Ship) -> NavGoal:
 	var ahead := radial.rotated(_normal, LEAD_ANGLE)
 	# Chasing a point ahead cuts the corner: the ship settles at radius * cos(LEAD_ANGLE).
 	# Aiming slightly wider compensates for that.
-	return NavGoal.new(center + ahead * orbit_radius / cos(LEAD_ANGLE), false, target)
+	return NavGoal.new(center + ahead * orbit_radius / cos(LEAD_ANGLE), false, node)
 
 
 func is_complete(_ship: Ship) -> bool:
-	return not is_instance_valid(target)
+	return target == null
 
 
 ## Orbit plane normal: the natural one if it is clear, otherwise the closest clear one.

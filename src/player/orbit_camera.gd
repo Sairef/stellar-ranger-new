@@ -8,7 +8,12 @@ extends Camera3D
 ## Numpad 4/6/8/2 rotate by exact STEP_DEGREES and numpad +/- zoom by one step:
 ## handy for repeatable views when debugging, also through simulated input.
 
-@export var target: Node3D
+## What the camera follows; reads as null once it is gone (the camera then stays put).
+@export var target: Node3D:
+	get:
+		return _target.resolve() if _target != null else null
+	set(value):
+		_target = ObjectRef.to(value)
 @export var distance := 250.0
 @export var min_distance := 30.0
 @export var max_distance := 12000.0
@@ -25,6 +30,8 @@ var pitch := -0.45
 
 const MAX_PITCH := 1.45
 const STEP_DEGREES := 15.0
+
+var _target: ObjectRef = null
 
 ## Arrow keys currently held. Tracked from events rather than polled from Input,
 ## so it also works for simulated input that bypasses the global Input state.
@@ -86,9 +93,10 @@ func _process(delta: float) -> void:
 	if horizontal != 0.0 or vertical != 0.0:
 		rotate_by(horizontal * key_rotate_speed * delta, vertical * key_rotate_speed * delta)
 
-	if not is_instance_valid(target):
+	var followed := target
+	if followed == null:
 		return
-	var focus := target.get_global_transform_interpolated().origin
+	var focus := followed.get_global_transform_interpolated().origin
 	var offset := Basis.from_euler(Vector3(pitch, yaw, 0.0)) * Vector3(0.0, 0.0, distance)
 	global_position = focus + offset
 	look_at(focus, Vector3.UP)

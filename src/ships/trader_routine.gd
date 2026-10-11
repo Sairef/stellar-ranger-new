@@ -19,7 +19,7 @@ var undock_in := 0.0
 
 var _ship: Ship
 var _rng := RandomNumberGenerator.new()
-var _last_station: Node = null
+var _last_station := ObjectRef.new()
 var _visited_station := false
 
 
@@ -41,7 +41,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _on_docked(station: SpaceBody) -> void:
-	_last_station = station
+	_last_station = ObjectRef.to(station)
 	_visited_station = true
 	undock_in = _rng.randf_range(dock_time.x, dock_time.y)
 
@@ -52,7 +52,7 @@ func _choose_destination() -> void:
 		if gate != null:
 			_ship.give_order(JumpOrder.new(gate))
 			return
-	var station := _pick(stations, _last_station) as SpaceBody
+	var station := _pick(stations, _last_station.resolve()) as SpaceBody
 	if station != null:
 		_ship.give_order(DockOrder.new(station))
 

@@ -22,7 +22,7 @@ const BUBBLE_COLOR := Color(1.0, 0.3, 0.3, 0.35)
 
 var _immediate := ImmediateMesh.new()
 var _material := StandardMaterial3D.new()
-var _trails := {}  # Ship -> PackedVector3Array
+var _trails := {}  # Ship id -> PackedVector3Array
 var _trail_timer := 0.0
 
 
@@ -62,7 +62,7 @@ func _process(delta: float) -> void:
 			_add_line(lines, colors, origin, ship.goal_point, GOAL_COLOR)
 		if ship.desired_velocity.length_squared() > 0.01:
 			_add_line(lines, colors, origin, origin + ship.desired_velocity * 1.5, STEER_COLOR)
-		var trail: PackedVector3Array = _trails.get(ship, PackedVector3Array())
+		var trail: PackedVector3Array = _trails.get(ship.object_id, PackedVector3Array())
 		for i in range(1, trail.size()):
 			_add_line(lines, colors, trail[i - 1], trail[i], TRAIL_COLOR)
 
@@ -83,20 +83,20 @@ func _process(delta: float) -> void:
 
 
 func _record_trails(ships: Array, delta: float) -> void:
-	for ship in _trails.keys():
-		if not is_instance_valid(ship):
-			_trails.erase(ship)
+	for id: int in _trails.keys():
+		if World.find(id) == null:
+			_trails.erase(id)
 	_trail_timer -= delta
 	if _trail_timer > 0.0:
 		return
 	_trail_timer = TRAIL_INTERVAL
 	for node in ships:
 		var ship := node as Ship
-		var trail: PackedVector3Array = _trails.get(ship, PackedVector3Array())
+		var trail: PackedVector3Array = _trails.get(ship.object_id, PackedVector3Array())
 		trail.append(ship.global_position)
 		if trail.size() > TRAIL_LENGTH:
 			trail.remove_at(0)
-		_trails[ship] = trail
+		_trails[ship.object_id] = trail
 
 
 func _add_line(lines: PackedVector3Array, colors: PackedColorArray, from: Vector3, to: Vector3,

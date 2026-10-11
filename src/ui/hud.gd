@@ -57,7 +57,7 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	var hovered: Node3D = controller.hovered if is_instance_valid(controller.hovered) else null
+	var hovered := controller.hovered
 	_hover_label.visible = hovered != null
 	if hovered != null:
 		_hover_label.text = Autopilot.name_of(hovered)
@@ -65,8 +65,7 @@ func _process(_delta: float) -> void:
 
 	var has_ship := controller.has_ship()
 	var ship := controller.ship if has_ship else null
-	# The selection may have just left the system (jumped out, destroyed) and been freed.
-	var target: Node3D = controller.selected if is_instance_valid(controller.selected) else null
+	var target := controller.selected
 	var lines := PackedStringArray()
 	if has_ship:
 		lines.append("%s   speed %3.0f / %.0f m/s" % [ship.display_name, ship.speed, ship.max_speed])

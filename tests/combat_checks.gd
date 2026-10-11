@@ -4,22 +4,26 @@ extends Node
 ##   godot --headless --path . --fixed-fps 60 res://tests/combat_checks.tscn
 ## Set the environment variable NAV_DIAG=1 to print every physical contact.
 
+const ErrorLog := preload("res://tests/support/error_log.gd")
 const ShipScene := preload("res://src/ships/ship.tscn")
 ## 75% over a few dozen shots: allow for chance, but catch a broken hit roll.
 const MIN_HIT_RATIO := 0.55
 const MAX_HIT_RATIO := 0.95
 
 var _world: Node3D
+var _errors := ErrorLog.new()
 var _passed := 0
 var _failed := 0
 
 
 func _ready() -> void:
+	OS.add_logger(_errors)
 	await _damage_layers()
 	await _duel()
 	await _out_of_range()
 	await _pirate_meets_armed_trader()
 	await _combat_sandbox_scene()
+	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 

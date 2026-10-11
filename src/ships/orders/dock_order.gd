@@ -9,5 +9,5 @@ func get_label() -> String:
 	return "Dock at %s%s" % [Autopilot.name_of(structure), _phase_suffix()]
 
 
-func _on_inside(ship: Ship) -> void:
-	ship.dock(structure, corridor)
+func _on_inside(ship: Ship, body: SpaceBody) -> void:
+	ship.dock(body, corridor)
