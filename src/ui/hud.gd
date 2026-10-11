@@ -8,7 +8,7 @@ extends CanvasLayer
 @export var debug_draw: NavDebugDraw
 
 const HELP_TEXT := "LMB: select   Double click: approach object / fly to point   " \
-		+ "RMB drag: rotate camera   Wheel: zoom   F3: navigation debug"
+		+ "RMB drag / arrows: rotate camera   Wheel: zoom   F3: navigation debug"
 
 var _status: Label
 var _approach_button: Button

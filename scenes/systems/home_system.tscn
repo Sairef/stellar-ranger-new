@@ -1,0 +1,162 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://src/world/space_sky.gdshader" id="1_sky"]
+[ext_resource type="PackedScene" path="res://src/world/station.tscn" id="2_station"]
+[ext_resource type="PackedScene" path="res://src/world/gate.tscn" id="3_gate"]
+[ext_resource type="Script" path="res://src/world/asteroid_field.gd" id="4_field"]
+[ext_resource type="PackedScene" path="res://src/ships/ship.tscn" id="5_ship"]
+[ext_resource type="Script" path="res://src/ships/npc_routine.gd" id="6_routine"]
+[ext_resource type="Script" path="res://src/player/player_controller.gd" id="7_controller"]
+[ext_resource type="Script" path="res://src/player/orbit_camera.gd" id="8_camera"]
+[ext_resource type="Script" path="res://src/debug/nav_debug_draw.gd" id="9_debug"]
+[ext_resource type="Script" path="res://src/ui/hud.gd" id="10_hud"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
+shader = ExtResource("1_sky")
+
+[sub_resource type="Sky" id="Sky_space"]
+sky_material = SubResource("ShaderMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_space"]
+background_mode = 2
+sky = SubResource("Sky_space")
+ambient_light_source = 2
+ambient_light_color = Color(0.35, 0.4, 0.55, 1)
+ambient_light_energy = 0.35
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="HomeSystem" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_space")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.35, 2.6, 0)
+light_color = Color(1, 0.95, 0.85, 1)
+light_energy = 1.4
+shadow_enabled = true
+directional_shadow_max_distance = 4000.0
+
+[node name="Stations" type="Node3D" parent="."]
+
+[node name="HalcyonExchange" parent="Stations" instance=ExtResource("2_station")]
+position = Vector3(-1200, 80, 600)
+display_name = "Halcyon Exchange"
+radius = 220.0
+
+[node name="BastionOutpost" parent="Stations" instance=ExtResource("2_station")]
+position = Vector3(1500, -150, -700)
+rotation = Vector3(0, 0.6, 0)
+display_name = "Bastion Outpost"
+radius = 180.0
+style = 1
+hull_color = Color(0.42, 0.47, 0.55, 1)
+
+[node name="Gates" type="Node3D" parent="."]
+
+[node name="NorthGate" parent="Gates" instance=ExtResource("3_gate")]
+position = Vector3(300, 250, -3200)
+rotation = Vector3(0, 3.048, 0)
+display_name = "Gate to Aurum"
+destination = "Aurum"
+
+[node name="EastGate" parent="Gates" instance=ExtResource("3_gate")]
+position = Vector3(3400, -100, 900)
+rotation = Vector3(0, 1.312, 0)
+display_name = "Gate to Vesper"
+destination = "Vesper"
+
+[node name="WestGate" parent="Gates" instance=ExtResource("3_gate")]
+position = Vector3(-3300, 180, -900)
+rotation = Vector3(0, -1.837, 0)
+display_name = "Gate to Morrow"
+destination = "Morrow"
+
+[node name="AsteroidField" type="Node3D" parent="."]
+position = Vector3(-2200, -100, 2600)
+script = ExtResource("4_field")
+field_seed = 7
+
+[node name="Ships" type="Node3D" parent="."]
+
+[node name="PlayerShip" parent="Ships" instance=ExtResource("5_ship")]
+position = Vector3(-1200, 80, 930)
+rotation = Vector3(0, -0.911, 0)
+display_name = "You"
+hull_color = Color(0.3, 0.75, 1, 1)
+
+[node name="TraderKestrel" parent="Ships" instance=ExtResource("5_ship")]
+position = Vector3(-900, 80, 600)
+display_name = "Trader Kestrel"
+hull_color = Color(0.8, 0.6, 1, 1)
+max_speed = 90.0
+acceleration = 25.0
+turn_rate = 1.0
+
+[node name="Routine" type="Node" parent="Ships/TraderKestrel"]
+script = ExtResource("6_routine")
+waypoints = Array[NodePath]([NodePath("../../../Stations/BastionOutpost"), NodePath("../../../Stations/HalcyonExchange")])
+distance = 80.0
+
+[node name="HaulerMule" parent="Ships" instance=ExtResource("5_ship")]
+position = Vector3(1500, -150, -400)
+display_name = "Hauler Mule"
+radius = 12.0
+hull_color = Color(0.9, 0.8, 0.4, 1)
+max_speed = 70.0
+acceleration = 20.0
+turn_rate = 0.8
+
+[node name="Routine" type="Node" parent="Ships/HaulerMule"]
+script = ExtResource("6_routine")
+waypoints = Array[NodePath]([NodePath("../../../Gates/EastGate"), NodePath("../../../Stations/HalcyonExchange")])
+distance = 80.0
+
+[node name="PatrolVigil" parent="Ships" instance=ExtResource("5_ship")]
+position = Vector3(1800, -150, -700)
+display_name = "Patrol Vigil"
+hull_color = Color(0.45, 0.9, 0.45, 1)
+max_speed = 160.0
+acceleration = 60.0
+turn_rate = 2.0
+
+[node name="Routine" type="Node" parent="Ships/PatrolVigil"]
+script = ExtResource("6_routine")
+waypoints = Array[NodePath]([NodePath("../../../Gates/NorthGate"), NodePath("../../../Gates/WestGate"), NodePath("../../../Stations/BastionOutpost")])
+distance = 100.0
+
+[node name="PatrolWard" parent="Ships" instance=ExtResource("5_ship")]
+position = Vector3(1500, -150, -1000)
+display_name = "Patrol Ward"
+hull_color = Color(0.45, 0.9, 0.45, 1)
+max_speed = 160.0
+acceleration = 60.0
+turn_rate = 2.0
+
+[node name="Routine" type="Node" parent="Ships/PatrolWard"]
+script = ExtResource("6_routine")
+waypoints = Array[NodePath]([NodePath("../../../Gates/EastGate"), NodePath("../../../Stations/BastionOutpost")])
+distance = 100.0
+
+[node name="PlayerController" type="Node" parent="." node_paths=PackedStringArray("ship", "camera")]
+script = ExtResource("7_controller")
+ship = NodePath("../Ships/PlayerShip")
+camera = NodePath("../Camera")
+
+[node name="Camera" type="Camera3D" parent="." node_paths=PackedStringArray("target")]
+near = 0.5
+far = 60000.0
+current = true
+script = ExtResource("8_camera")
+target = NodePath("../Ships/PlayerShip")
+distance = 400.0
+
+[node name="NavDebugDraw" type="MeshInstance3D" parent="."]
+script = ExtResource("9_debug")
+enabled = false
+
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("controller", "debug_draw")]
+script = ExtResource("10_hud")
+controller = NodePath("../PlayerController")
+debug_draw = NodePath("../NavDebugDraw")

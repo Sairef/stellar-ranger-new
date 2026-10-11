@@ -49,6 +49,7 @@ A single-player 3D space sandbox where the galaxy lives by its own rules and doe
 ## The world
 
 - **Galaxy:** star systems connected by gates.
+- **System layout:** objects lie near a common "ecliptic" plane with a moderate vertical spread (a few degrees as seen from the system center, i.e. a few hundred meters at 3 km). Fully flat looks like a 2D game in 3D clothes; fully random 3D is disorienting and hard to show on a map. A future system map can be a top-down view with height "stalks". Asteroid fields are thick volumes.
 - **Factions:** with territories, economies and relations to each other and to the player.
 - **NPC roles:** miners, traders, patrols, pirates, etc. Each runs its own routine and reacts to threats.
 - **Background story:** a slow-burning conflict with an "Eternal Enemy" that invades through gates. The pace is slow enough that the game does not play itself to an end, but the conflict never waits for the player.
@@ -87,7 +88,7 @@ Every system in the first milestone exists to make this scene possible.
 - **Captivity.** What does gameplay as a pirate captive look like, and how does the player get out?
 - **Ship loss economy.** Is there insurance? Is cargo dropped in the wreck? How expensive is a new start?
 - **Time.** Real time with pause? Time acceleration for long travel (X4's SETA)?
-- **Travel inside a system.** Distances and speeds; is there a warp / cruise mode?
+- **Travel inside a system.** Distances and speeds; is there a warp / cruise mode? For now the home system is compact (~7 km across, about a minute to cross at 120 m/s).
 - **Eternal Enemy.** Who are they, what do they want, can they actually win territory?
 - **Factions.** How many, and what makes each one distinct?
 - **Visual style.** Which style is achievable for a small team (stylized, low-poly, procedural)?
@@ -109,7 +110,7 @@ Not included yet: multiple systems, full economy, skills, ship fitting UI, stati
 
 Draft step order:
 1. ✅ A ship in 3D space that moves by commands (move to / approach / orbit / stop), plus camera. Ships fly around obstacles (asteroids) and avoid colliding with each other. Covered by `tests/nav_scenarios.tscn`. Known limit: dense asteroid fields will need real path planning.
-2. Static world: station, asteroids, gate.
+2. ✅ Static world: the home system (`scenes/systems/home_system.tscn`) with two stations (trade, military), three gates and an asteroid field in a corner. Field rocks keep wide gaps, so ships can fly through it. Docking and gate jumps come later.
 3. NPC routines (miner, trader, patrol) using the same order system.
 4. Combat: weapons, health, destruction, wrecks.
 5. Invasion event and NPC threat reactions.

@@ -73,8 +73,8 @@ func _pick_normal(ship: Ship, center: Vector3, offset: Vector3, orbit_radius: fl
 		# A tilt of +-90 degrees covers all of them (180 is the same plane flown backwards).
 		var axis := offset.normalized()
 		for step in range(0, int(90.0 / TILT_STEP) + 1):
-			for sign: float in [1.0, -1.0]:
-				var candidate := natural.rotated(axis, deg_to_rad(step * TILT_STEP) * sign)
+			for direction: float in [1.0, -1.0]:
+				var candidate := natural.rotated(axis, deg_to_rad(step * TILT_STEP) * direction)
 				if _clearance(candidate, center, orbit_radius, ship, obstacles) >= 0.0:
 					return candidate
 

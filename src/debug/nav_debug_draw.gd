@@ -57,11 +57,11 @@ func _process(delta: float) -> void:
 	var colors := PackedColorArray()
 	for node in ships:
 		var ship := node as Ship
-		var position := ship.get_global_transform_interpolated().origin
+		var origin := ship.get_global_transform_interpolated().origin
 		if ship.has_goal:
-			_add_line(lines, colors, position, ship.goal_point, GOAL_COLOR)
+			_add_line(lines, colors, origin, ship.goal_point, GOAL_COLOR)
 		if ship.desired_velocity.length_squared() > 0.01:
-			_add_line(lines, colors, position, position + ship.desired_velocity * 1.5, STEER_COLOR)
+			_add_line(lines, colors, origin, origin + ship.desired_velocity * 1.5, STEER_COLOR)
 		var trail: PackedVector3Array = _trails.get(ship, PackedVector3Array())
 		for i in range(1, trail.size()):
 			_add_line(lines, colors, trail[i - 1], trail[i], TRAIL_COLOR)

@@ -32,6 +32,8 @@ func _ready() -> void:
 	await _orbit_ship_next_to_asteroid(Vector3(-300, 0, 0), Vector3.RIGHT, "from behind the rock")
 	await _move_into_asteroid()
 	await _busy_traffic()
+	await _through_asteroid_field()
+	await _home_system_soak()
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 
@@ -196,6 +198,51 @@ func _busy_traffic() -> void:
 	_add_routine(ships[3], NpcRoutine.Mode.PATROL, [a, c])
 	_add_routine(ships[4], NpcRoutine.Mode.ORBIT, [b])
 	await _expect_no_traffic_accident(ships, 90.0, [a, b, c], false)
+
+
+## Rocks in a field are spaced so the ship can thread between them instead of going around.
+func _through_asteroid_field() -> void:
+	_begin("Fly straight through an asteroid field")
+	var field := AsteroidField.new()
+	field.field_seed = 7
+	field.count = 60
+	field.extents = Vector3(700, 200, 500)
+	_world.add_child(field)
+	var rocks := field.get_children().filter(func(node: Node) -> bool: return node is Asteroid)
+	var ship := _spawn_ship("Tester", Vector3(-1000, 0, 0), Vector3.RIGHT)
+	ship.give_order(MoveToOrder.new(Vector3(1000, 0, 0)))
+
+	var stats := {"gap": INF}
+	var probe := func() -> void:
+		for rock: Node3D in rocks:
+			stats.gap = minf(stats.gap, _gap(ship, rock))
+	var time: float = await _simulate(90.0, func() -> bool: return ship.current_order == null, probe)
+
+	_check(rocks.size() >= 40, "the field has %d rocks" % rocks.size())
+	_check(time > 0.0 and time < 30.0, "crossed the field without a long detour (%.1f s)" % time)
+	_check(stats.gap > MIN_GAP, "never touched a rock (closest hull gap %.1f m)" % stats.gap)
+	_check(ship.collision_ticks == 0, "no physical contacts (%d ticks)" % ship.collision_ticks)
+	await _end()
+
+
+## The real main scene with all its NPC traffic, while the player flies through the asteroid field.
+func _home_system_soak() -> void:
+	_begin("Home system: 180 s of traffic, the player crosses the asteroid field")
+	var system: Node3D = load("res://scenes/systems/home_system.tscn").instantiate()
+	_world.add_child(system)
+	var player := system.get_node("Ships/PlayerShip") as Ship
+	var arrival := {"done": false}
+	player.order_changed.connect(func(order: ShipOrder) -> void:
+		if order == null:
+			arrival.done = true)
+	player.give_order(MoveToOrder.new(Vector3(-2200, -100, 3500)))
+
+	var ships: Array[Ship] = []
+	for node in system.get_node("Ships").get_children():
+		ships.append(node as Ship)
+	var obstacles := get_tree().get_nodes_in_group(Autopilot.OBSTACLE_GROUP)
+	await _expect_no_traffic_accident(ships, 180.0, obstacles, false)
+	_check(arrival.done, "the player crossed the asteroid field")
 
 
 # --- Helpers ---------------------------------------------------------------------------------

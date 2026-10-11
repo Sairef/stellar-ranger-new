@@ -1,6 +1,7 @@
 shader_type sky;
 
-// Procedural starfield: random stars on a dark background plus a faint galactic band.
+// Procedural starfield: random stars on a dark background plus a faint galactic band,
+// and the system's star drawn in the direction of the first DirectionalLight3D.
 // No textures needed. Stars are placed on a 3D grid of view directions.
 
 uniform vec3 background : source_color = vec3(0.004, 0.005, 0.012);
@@ -9,6 +10,8 @@ uniform vec3 band_color : source_color = vec3(0.05, 0.035, 0.08);
 uniform float star_density = 0.0025;
 // Grid resolution: higher means smaller, denser stars.
 uniform float star_scale = 350.0;
+// Angular radius of the sun disc, in radians.
+uniform float sun_radius = 0.012;
 
 float hash(vec3 p) {
 	p = fract(p * 0.3183099 + 0.1);
@@ -38,6 +41,12 @@ void sky() {
 				}
 			}
 		}
+	}
+	if (LIGHT0_ENABLED) {
+		float angle = acos(clamp(dot(dir, LIGHT0_DIRECTION), -1.0, 1.0));
+		float disc = 1.0 - smoothstep(sun_radius * 0.8, sun_radius, angle);
+		float halo = 0.6 * exp(-angle * 40.0) + 0.15 * exp(-angle * 6.0);
+		color += LIGHT0_COLOR * (disc * 12.0 + halo);
 	}
 	COLOR = color;
 }

@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Stellar Ranger"
-run/main_scene="res://scenes/sandbox/flight_sandbox.tscn"
+run/main_scene="res://scenes/systems/home_system.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
