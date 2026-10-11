@@ -6,8 +6,9 @@ extends Node
 ##
 ## Left click: select an object. Double click: approach the object under the cursor,
 ## or fly to that point on the ship's horizontal plane if there is nothing there.
-## Q: approach selected, W: orbit selected, Space: stop.
+## Q: approach selected, W: orbit selected, E: attack selected ship, Space: stop.
 ## The object under the cursor gets a faint ring (`hovered`), so it is clear what a click selects.
+## The player's ship can be destroyed: then `ship` is gone until someone assigns a new one.
 
 signal selection_changed(target: Node3D)
 
@@ -63,12 +64,16 @@ func _unhandled_input(event: InputEvent) -> void:
 				approach_selected()
 			KEY_W:
 				orbit_selected()
+			KEY_E:
+				attack_selected()
 			KEY_SPACE:
 				stop()
 
 
 func _process(_delta: float) -> void:
-	if selected != null and not is_instance_valid(selected):
+	# The selection may have been freed (destroyed, jumped out). A freed object compares equal
+	# to null, so `selected != null` cannot tell; is_same() can.
+	if not is_same(selected, null) and not is_instance_valid(selected):
 		select(null)
 	hovered = pick(get_viewport().get_mouse_position())
 	_place_ring(_marker, selected)
@@ -78,24 +83,38 @@ func _process(_delta: float) -> void:
 func select(target: Node3D) -> void:
 	if target == ship:
 		target = null
-	if target == selected:
+	if is_same(target, selected):
 		return
 	selected = target
 	selection_changed.emit(selected)
 
 
+func has_ship() -> bool:
+	return is_instance_valid(ship) and ship.is_in_space()
+
+
 func approach_selected() -> void:
-	if is_instance_valid(selected):
+	if has_ship() and is_instance_valid(selected):
 		ship.give_order(ApproachOrder.new(selected, approach_distance))
 
 
 func orbit_selected() -> void:
-	if is_instance_valid(selected):
+	if has_ship() and is_instance_valid(selected):
 		ship.give_order(OrbitOrder.new(selected, orbit_distance))
 
 
+func attack_selected() -> void:
+	if has_ship() and can_attack_selected():
+		ship.give_order(AttackOrder.new(selected as Ship))
+
+
+func can_attack_selected() -> bool:
+	return is_instance_valid(selected) and selected is Ship
+
+
 func stop() -> void:
-	ship.stop()
+	if has_ship():
+		ship.stop()
 
 
 ## Space object under the cursor (ships and obstacles), or null.
@@ -140,6 +159,8 @@ func _on_double_click(screen_position: Vector2) -> void:
 		select(target)
 		approach_selected()
 		return
+	if not has_ship():
+		return
 	# Nothing under the cursor: fly to the point on the ship's horizontal plane.
 	var origin := camera.project_ray_origin(screen_position)
 	var direction := camera.project_ray_normal(screen_position)
@@ -152,9 +173,10 @@ func _on_double_click(screen_position: Vector2) -> void:
 
 
 ## Puts a ring around `target` (or hides it), at least MIN_RING_PIXELS wide on screen.
-func _place_ring(ring: Sprite3D, target: Node3D) -> void:
-	ring.visible = target != null
-	if target == null:
+## Untyped `target`: it may be a freed object, and a typed parameter would fail on the call.
+func _place_ring(ring: Sprite3D, target: Variant) -> void:
+	ring.visible = is_instance_valid(target)
+	if not ring.visible:
 		return
 	ring.global_position = target.get_global_transform_interpolated().origin
 	var world_size := Autopilot.radius_of(target) * 2.6

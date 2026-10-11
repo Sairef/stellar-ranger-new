@@ -76,11 +76,9 @@ func try_receive(ship: Ship, parent: Node) -> bool:
 	var order := LeaveOrder.new(self, ARRIVAL_CORRIDOR)
 	if not try_reserve_corridor(ARRIVAL_CORRIDOR, ship, order):
 		return false
-	parent.add_child(ship)
 	var corridor := get_corridor(ARRIVAL_CORRIDOR)
-	ship.global_position = corridor["inner"]
-	ship.look_at(corridor["outer"], Vector3.UP)
-	ship.reset_physics_interpolation()
+	var heading: Vector3 = corridor["outer"] - corridor["inner"]
+	ship.enter_space(parent, Transform3D(Basis.looking_at(heading, Vector3.UP), corridor["inner"]))
 	ship.speed = ARRIVAL_SPEED
 	ship.give_order(order)
 	flash()

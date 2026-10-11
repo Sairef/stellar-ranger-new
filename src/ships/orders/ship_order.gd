@@ -28,6 +28,11 @@ func get_goal(_ship: Ship) -> NavGoal:
 	return null
 
 
+## The ship the weapons should fire at while this order runs, if any.
+func get_attack_target() -> Ship:
+	return null
+
+
 ## True when the order is finished (or can no longer be carried out) and the ship should drop it.
 func is_complete(_ship: Ship) -> bool:
 	return false

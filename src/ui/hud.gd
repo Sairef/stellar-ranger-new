@@ -16,6 +16,7 @@ const HOVER_OFFSET := Vector2(18, 10)
 var _status: Label
 var _approach_button: Button
 var _orbit_button: Button
+var _attack_button: Button
 var _hover_label: Label
 
 
@@ -37,6 +38,7 @@ func _ready() -> void:
 	column.add_child(buttons)
 	_approach_button = _add_button(buttons, "Approach [Q]", controller.approach_selected)
 	_orbit_button = _add_button(buttons, "Orbit [W]", controller.orbit_selected)
+	_attack_button = _add_button(buttons, "Attack [E]", controller.attack_selected)
 	_add_button(buttons, "Stop [Space]", controller.stop)
 	if debug_draw != null:
 		_add_button(buttons, "Debug [F3]", debug_draw.toggle)
@@ -61,28 +63,40 @@ func _process(_delta: float) -> void:
 		_hover_label.text = Autopilot.name_of(hovered)
 		_hover_label.position = get_viewport().get_mouse_position() + HOVER_OFFSET
 
-	var ship := controller.ship
-	# The selection may have just left the system (jumped out and been freed).
+	var has_ship := controller.has_ship()
+	var ship := controller.ship if has_ship else null
+	# The selection may have just left the system (jumped out, destroyed) and been freed.
 	var target: Node3D = controller.selected if is_instance_valid(controller.selected) else null
-	var lines := PackedStringArray([
-		"%s   speed %3.0f / %.0f m/s" % [ship.display_name, ship.speed, ship.max_speed],
-		"Order: %s" % ship.get_order_label(),
-	])
+	var lines := PackedStringArray()
+	if has_ship:
+		lines.append("%s   speed %3.0f / %.0f m/s" % [ship.display_name, ship.speed, ship.max_speed])
+		lines.append("Shield %.0f / %.0f   Armor %.0f / %.0f" % [
+				ship.shield, ship.max_shield, ship.armor, ship.max_armor])
+		lines.append("Order: %s" % ship.get_order_label())
+	else:
+		lines.append("Your ship has been destroyed")
+
 	if target != null:
-		var gap := ship.global_position.distance_to(target.global_position) \
-				- Autopilot.radius_of(target) - ship.radius
-		lines.append("Target: %s   %.0f m" % [Autopilot.name_of(target), gap])
-		var other := target as Ship
-		if other != null:
-			var activity := other.get_order_label()
+		var line := "Target: %s" % Autopilot.name_of(target)
+		if has_ship:
+			var gap := ship.global_position.distance_to(target.global_position) \
+					- Autopilot.radius_of(target) - ship.radius
+			line += "   %.0f m" % gap
+		lines.append(line)
+		if target is Ship:
+			var other := target as Ship
+			var activity := "%s   %s" % [other.get_health_text(), other.get_order_label()]
 			if other.cargo > 0.0:
 				activity += "   cargo %.0f / %.0f" % [other.cargo, other.cargo_capacity]
 			lines.append("   " + activity)
+		elif target is Wreck:
+			lines.append("   Contains: %s" % ", ".join((target as Wreck).contents))
 	else:
 		lines.append("Target: none (click an object)")
 	_status.text = "\n".join(lines)
-	_approach_button.disabled = target == null
-	_orbit_button.disabled = target == null
+	_approach_button.disabled = not has_ship or target == null
+	_orbit_button.disabled = not has_ship or target == null
+	_attack_button.disabled = not has_ship or not controller.can_attack_selected()
 
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:

@@ -46,6 +46,14 @@ func _ready() -> void:
 			"a click 8 px off that ship still selects the ship, not the station behind")
 	_check(controller.pick(Vector2(5, 5)) == null, "a click on empty space selects nothing")
 
+	# Bug report: the selected ship got destroyed and the game crashed on the selection ring.
+	# A freed object compares equal to null, so only is_same() shows it is really cleared.
+	controller.select(trader)
+	(trader as Ship).take_hit(1000.0, player)
+	for i in 3:
+		await get_tree().process_frame
+	_check(is_same(controller.selected, null), "a destroyed selection is cleared (%s)" % controller.selected)
+
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 

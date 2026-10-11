@@ -1,0 +1,106 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/debug/combat_sandbox.gd" id="1_sandbox"]
+[ext_resource type="Shader" path="res://src/world/space_sky.gdshader" id="2_sky"]
+[ext_resource type="PackedScene" path="res://src/world/asteroid.tscn" id="3_asteroid"]
+[ext_resource type="PackedScene" path="res://src/ships/ship.tscn" id="4_ship"]
+[ext_resource type="Script" path="res://src/ships/combat_routine.gd" id="5_combat"]
+[ext_resource type="Script" path="res://src/player/player_controller.gd" id="6_controller"]
+[ext_resource type="Script" path="res://src/player/orbit_camera.gd" id="7_camera"]
+[ext_resource type="Script" path="res://src/debug/nav_debug_draw.gd" id="8_debug_draw"]
+[ext_resource type="Script" path="res://src/ui/hud.gd" id="9_hud"]
+[ext_resource type="Script" path="res://src/ui/debug_panel.gd" id="10_debug_panel"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
+shader = ExtResource("2_sky")
+
+[sub_resource type="Sky" id="Sky_space"]
+sky_material = SubResource("ShaderMaterial_sky")
+
+[sub_resource type="Environment" id="Environment_space"]
+background_mode = 2
+sky = SubResource("Sky_space")
+ambient_light_source = 2
+ambient_light_color = Color(0.35, 0.4, 0.55, 1)
+ambient_light_energy = 0.35
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="CombatSandbox" type="Node3D" node_paths=PackedStringArray("controller", "camera", "debug_panel", "ships_root")]
+script = ExtResource("1_sandbox")
+controller = NodePath("PlayerController")
+camera = NodePath("Camera")
+debug_panel = NodePath("DebugPanel")
+ships_root = NodePath("Ships")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_space")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.35, 2.6, 0)
+light_color = Color(1, 0.95, 0.85, 1)
+light_energy = 1.4
+shadow_enabled = true
+directional_shadow_max_distance = 4000.0
+
+[node name="Asteroids" type="Node3D" parent="."]
+
+[node name="RockA" parent="Asteroids" instance=ExtResource("3_asteroid")]
+position = Vector3(300, 0, -600)
+display_name = "Rock A"
+radius = 50.0
+shape_seed = 11
+
+[node name="RockB" parent="Asteroids" instance=ExtResource("3_asteroid")]
+position = Vector3(-400, 40, -900)
+display_name = "Rock B"
+radius = 70.0
+shape_seed = 12
+
+[node name="RockC" parent="Asteroids" instance=ExtResource("3_asteroid")]
+position = Vector3(100, -60, -1250)
+display_name = "Rock C"
+radius = 40.0
+shape_seed = 13
+
+[node name="Ships" type="Node3D" parent="."]
+
+[node name="PlayerShip" parent="Ships" instance=ExtResource("4_ship")]
+display_name = "You"
+hull_color = Color(0.3, 0.75, 1, 1)
+faction = &"player"
+
+[node name="Pirate1" parent="Ships" instance=ExtResource("4_ship")]
+position = Vector3(0, 0, -1700)
+rotation = Vector3(0, 3.1416, 0)
+display_name = "Pirate 1"
+hull_color = Color(0.9, 0.25, 0.2, 1)
+faction = &"pirate"
+
+[node name="CombatRoutine" type="Node" parent="Ships/Pirate1"]
+script = ExtResource("5_combat")
+
+[node name="PlayerController" type="Node" parent="." node_paths=PackedStringArray("ship", "camera")]
+script = ExtResource("6_controller")
+ship = NodePath("../Ships/PlayerShip")
+camera = NodePath("../Camera")
+
+[node name="Camera" type="Camera3D" parent="." node_paths=PackedStringArray("target")]
+near = 0.5
+far = 60000.0
+current = true
+script = ExtResource("7_camera")
+target = NodePath("../Ships/PlayerShip")
+distance = 600.0
+
+[node name="NavDebugDraw" type="MeshInstance3D" parent="."]
+script = ExtResource("8_debug_draw")
+enabled = false
+
+[node name="Hud" type="CanvasLayer" parent="." node_paths=PackedStringArray("controller", "debug_draw")]
+script = ExtResource("9_hud")
+controller = NodePath("../PlayerController")
+debug_draw = NodePath("../NavDebugDraw")
+
+[node name="DebugPanel" type="CanvasLayer" parent="."]
+script = ExtResource("10_debug_panel")

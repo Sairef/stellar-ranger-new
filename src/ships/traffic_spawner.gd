@@ -69,9 +69,10 @@ func get_trader_count() -> int:
 func _spawn_initial() -> void:
 	for i in initial_traders:
 		var station := _random_node(stations) as SpaceBody
+		var corridor := _rng.randi() % station.get_corridor_count()
 		var ship := _create_trader()
-		_root.add_child(ship)
-		ship.dock_instantly(station, _rng.randi() % station.get_corridor_count())
+		ship.enter_space(_root, Transform3D(Basis.IDENTITY, station.get_corridor(corridor)["inner"]))
+		ship.dock_instantly(station, corridor)
 		# Stagger the first departures.
 		(ship.get_node("TraderRoutine") as TraderRoutine).undock_in = _rng.randf_range(1.0, 20.0)
 

@@ -21,6 +21,9 @@ signal undocked(station: SpaceBody)
 signal jumped(gate: Gate)
 ## Physical contact with something (another ship, a rock, a structure).
 signal collided(collider: Object)
+signal damaged(attacker: Ship)
+## Emitted right before the ship is removed; its wreck is already in the scene.
+signal destroyed(ship: Ship, wreck: Wreck)
 
 ## Fraction of the target speed kept while the nose points straight away from the goal.
 const MIN_TURN_SPEED_FACTOR := 0.05
@@ -40,6 +43,13 @@ const ALL_SHIPS_GROUP := &"all_ships"
 	set(value):
 		hull_color = value
 		_queue_rebuild()
+## See Factions: decides who shoots at whom on sight.
+@export var faction := Factions.NEUTRAL
+
+@export_group("Durability")
+## Damage goes to the shield first, then to the armor. No armor left: the ship is destroyed.
+@export var max_shield := 20.0
+@export var max_armor := 10.0
 
 @export_group("Flight")
 ## Top speed in m/s.
@@ -55,6 +65,8 @@ const ALL_SHIPS_GROUP := &"all_ships"
 var current_order: ShipOrder = null
 ## Current forward speed in m/s.
 var speed := 0.0
+var shield := 0.0
+var armor := 0.0
 ## Cargo units in the hold.
 var cargo := 0.0
 ## Point (Vector3) the work beam (e.g. mining laser) is aimed at, or null when it is off.
@@ -76,6 +88,7 @@ var _collision_mask := 1
 var _engine_glow: Node3D
 var _beam: MeshInstance3D
 var _beam_material: StandardMaterial3D
+var _label: Label3D
 
 
 func _ready() -> void:
@@ -84,6 +97,8 @@ func _ready() -> void:
 	motion_mode = MOTION_MODE_FLOATING
 	_collision_layer = collision_layer
 	_collision_mask = collision_mask
+	shield = max_shield
+	armor = max_armor
 	_rebuild()
 
 
@@ -107,6 +122,67 @@ func get_forward() -> Vector3:
 
 func is_docked() -> bool:
 	return docked_at != null
+
+
+## Adds the ship to `parent` already at `where` (global). Placing it after adding would put it
+## at the parent's origin for a moment, where physics may push it out of whatever is there.
+func enter_space(parent: Node, where: Transform3D) -> void:
+	var parent_3d := parent as Node3D
+	transform = parent_3d.global_transform.affine_inverse() * where if parent_3d != null else where
+	parent.add_child(self)
+	reset_physics_interpolation()
+
+
+## Out in space and still in one piece: can fly, shoot and be shot.
+func is_in_space() -> bool:
+	return not _gone and docked_at == null and is_inside_tree()
+
+
+func is_hostile_to(other: Ship) -> bool:
+	return Factions.are_hostile(faction, other.faction)
+
+
+func get_weapon() -> Weapon:
+	for child in get_children():
+		if child is Weapon:
+			return child
+	return null
+
+
+## Where shots leave the ship: the tip of the nose.
+func get_muzzle_position() -> Vector3:
+	return global_position + get_forward() * radius
+
+
+func get_health_text() -> String:
+	return "S %d  A %d" % [ceili(shield), ceili(armor)]
+
+
+# --- Damage ----------------------------------------------------------------------------------
+
+## Applies weapon damage: shield first, then armor. Destroys the ship when armor runs out.
+func take_hit(damage: float, attacker: Ship) -> void:
+	if not is_in_space():
+		return
+	var absorbed := minf(shield, damage)
+	shield -= absorbed
+	armor = maxf(0.0, armor - (damage - absorbed))
+	_update_label()
+	damaged.emit(attacker)
+	if armor <= 0.0:
+		_destroy()
+
+
+func _destroy() -> void:
+	_gone = true
+	give_order(null)
+	_set_in_space(false)
+	CombatEffects.explosion(self, global_position, radius)
+	var wreck := Wreck.from_ship(self)
+	FadingEffect.root_for(self).add_child(wreck)
+	wreck.global_position = global_position
+	destroyed.emit(self, wreck)
+	queue_free()
 
 
 func get_order_label() -> String:
@@ -305,7 +381,17 @@ func _rebuild() -> void:
 	_add_generated(collision)
 
 	# Always visible for now (debugging); later visibility should come from sensors.
-	_add_generated(SpaceLabel.create(display_name, radius))
+	_label = SpaceLabel.create(display_name, radius)
+	_add_generated(_label)
+	_update_label()
+
+
+## Name, plus shield and armor once the ship has taken damage.
+func _update_label() -> void:
+	if _label == null:
+		return
+	var damaged_now := shield < max_shield or armor < max_armor
+	_label.text = "%s\n%s" % [display_name, get_health_text()] if damaged_now else display_name
 
 
 func _add_mesh(mesh: Mesh, material: Material) -> MeshInstance3D:

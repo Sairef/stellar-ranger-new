@@ -480,8 +480,8 @@ func _spawn_asteroid(asteroid_name: String, position: Vector3, radius: float) ->
 	var asteroid := AsteroidScene.instantiate() as Asteroid
 	asteroid.display_name = asteroid_name
 	asteroid.radius = radius
+	asteroid.position = position  # Before adding: the world sits at the origin.
 	_world.add_child(asteroid)
-	asteroid.global_position = position
 	return asteroid
 
 
@@ -491,8 +491,8 @@ func _spawn_station(station_name: String, position: Vector3, radius: float,
 	station.display_name = station_name
 	station.radius = radius
 	station.style = style
+	station.position = position
 	_world.add_child(station)
-	station.global_position = position
 	return station
 
 
@@ -500,19 +500,16 @@ func _spawn_station(station_name: String, position: Vector3, radius: float,
 func _spawn_gate(gate_name: String, position: Vector3, front_toward: Vector3) -> Gate:
 	var gate := GateScene.instantiate() as Gate
 	gate.display_name = gate_name
+	gate.transform = Transform3D(Basis.looking_at(front_toward - position, Vector3.UP), position)
 	_world.add_child(gate)
-	gate.global_position = position
-	gate.look_at(front_toward, Vector3.UP)
 	return gate
 
 
 func _spawn_ship(ship_name: String, position: Vector3, facing: Vector3) -> Ship:
 	var ship := ShipScene.instantiate() as Ship
 	ship.display_name = ship_name
-	_world.add_child(ship)
+	ship.enter_space(_world, Transform3D(Basis.looking_at(facing, Vector3.UP), position))
 	_watch_contacts(ship)
-	ship.global_position = position
-	ship.look_at(position + facing, Vector3.UP)
 	return ship
 
 
