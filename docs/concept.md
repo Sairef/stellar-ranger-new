@@ -92,6 +92,11 @@ Every system in the first milestone exists to make this scene possible.
 - **Eternal Enemy.** Who are they, what do they want, can they actually win territory?
 - **Factions.** How many, and what makes each one distinct?
 - **Visual style.** Which style is achievable for a small team (stylized, low-poly, procedural)?
+- **Sensors and labels.** Fading ship name labels by distance from the camera felt odd: what you see depended on where the camera was, not on what your ship knows. For now all labels are always visible (debugging). Probably visibility of ships and their labels should come from the player ship's sensors / radar (detection range, maybe signature size). Revisit when ships get sensors.
+
+## Later, with multiple systems
+
+- **Following through gates.** Approaching or orbiting a ship that jumps out should be able to follow it through the gate into the next system. With a single system the order simply ends when the target leaves.
 
 ## First milestone: "The Scene"
 
@@ -111,7 +116,7 @@ Not included yet: multiple systems, full economy, skills, ship fitting UI, stati
 Draft step order:
 1. ✅ A ship in 3D space that moves by commands (move to / approach / orbit / stop), plus camera. Ships fly around obstacles (asteroids) and avoid colliding with each other. Covered by `tests/nav_scenarios.tscn`. Known limit: dense asteroid fields will need real path planning.
 2. ✅ Static world: the home system (`scenes/systems/home_system.tscn`) with two stations (trade, military), three gates and an asteroid field in a corner. Field rocks keep wide gaps, so ships can fly through it. Docking and gate jumps come later.
-3. NPC routines (miner, trader, patrol) using the same order system.
+3. ✅ NPC routines (miner, trader, patrol) using the same order system. Ships dock at stations and jump through gates via corridors (one ship per corridor at a time); traders arrive and leave through gates, miners shuttle between their station and the field. A debug panel speeds up time and shows traffic stats.
 4. Combat: weapons, health, destruction, wrecks.
-5. Invasion event and NPC threat reactions.
+5. Invasion event and NPC threat reactions. Started by hand with a button on the debug panel, never automatically (for now).
 6. Loot drones and faction currency.

@@ -17,6 +17,12 @@ func get_target() -> Node3D:
 	return null
 
 
+## Called every physics tick before get_goal(): advance internal state (phases, timers).
+## May take actions such as docking the ship.
+func update(_ship: Ship, _delta: float) -> void:
+	pass
+
+
 ## Called every physics tick. Returns where the ship should go, or null to brake and hold position.
 func get_goal(_ship: Ship) -> NavGoal:
 	return null

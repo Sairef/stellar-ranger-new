@@ -9,6 +9,8 @@ extends Node
 
 enum Mode { PATROL, ORBIT }
 
+const GROUP := &"patrols"
+
 @export var mode := Mode.PATROL
 @export var waypoints: Array[NodePath] = []
 ## Approach distance (PATROL) or orbit distance (ORBIT) from the target's surface, in meters.
@@ -23,6 +25,7 @@ var _wait := 0.0
 
 func _ready() -> void:
 	_ship = get_parent() as Ship
+	_ship.add_to_group(GROUP)
 
 
 func _physics_process(delta: float) -> void:

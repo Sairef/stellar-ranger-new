@@ -7,12 +7,16 @@ design pillars and milestone plan are in `docs/concept.md` — read it before de
 
 ## Layout
 
-- `src/ships/` — `Ship` (flight model), `Autopilot` (obstacle/traffic avoidance), `NpcRoutine`.
+- `src/ships/` — `Ship` (flight model, docking, jumping), `Autopilot` (obstacle/traffic
+  avoidance), NPC brains (`NpcRoutine` for patrols/orbits, `TraderRoutine`, `MinerRoutine`),
+  `TrafficSpawner` (traders arriving through gates).
 - `src/ships/orders/` — `ShipOrder` and its subclasses. Player and NPCs control ships only
-  through `Ship.give_order()` (pillar "Same rules for everyone").
+  through `Ship.give_order()` (pillar "Same rules for everyone"). Docking and gate jumps go
+  through structure corridors (`SpaceBody` corridor API, one ship per corridor at a time).
 - `src/world/` — `SpaceBody` (base for static objects: a navigation sphere plus generated
   placeholder visuals) and its subclasses `Asteroid`, `Station`, `Gate`; `AsteroidField`;
-  labels, sky and gate shaders. `src/player/` — input and camera. `src/ui/` — HUD.
+  labels, sky and gate shaders. `src/player/` — input and camera. `src/ui/` — HUD and the
+  debug panel (time scale, traffic stats; home of manual debug triggers).
   `src/debug/` — debug overlays.
 - `scenes/systems/home_system.tscn` — main scene: the first star system.
 - `scenes/sandbox/flight_sandbox.tscn` — a small test bed for flight and navigation.
@@ -28,7 +32,8 @@ D:/Godot/Godot_v4.7.2-stable_win64_console.exe --headless --path . --fixed-fps 6
 
 Exit code 0 means all scenarios passed. Run `--headless --path . --import` first if new
 `class_name` scripts were added while the editor was closed. Camera controls have their own
-checks in `res://tests/camera_checks.tscn` (same command).
+checks in `res://tests/camera_checks.tscn` and mouse picking in `res://tests/picking_checks.tscn`
+(same command).
 
 ## Driving the running game (godot-ai MCP)
 

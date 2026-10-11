@@ -10,9 +10,13 @@ extends CanvasLayer
 const HELP_TEXT := "LMB: select   Double click: approach object / fly to point   " \
 		+ "RMB drag / arrows: rotate camera   Wheel: zoom   F3: navigation debug"
 
+## Offset of the hover name from the mouse cursor, in pixels.
+const HOVER_OFFSET := Vector2(18, 10)
+
 var _status: Label
 var _approach_button: Button
 var _orbit_button: Button
+var _hover_label: Label
 
 
 func _ready() -> void:
@@ -43,10 +47,23 @@ func _ready() -> void:
 	add_child(help)
 	help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 
+	_hover_label = Label.new()
+	_hover_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hover_label.add_theme_constant_override("outline_size", 6)
+	_hover_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	add_child(_hover_label)
+
 
 func _process(_delta: float) -> void:
+	var hovered: Node3D = controller.hovered if is_instance_valid(controller.hovered) else null
+	_hover_label.visible = hovered != null
+	if hovered != null:
+		_hover_label.text = Autopilot.name_of(hovered)
+		_hover_label.position = get_viewport().get_mouse_position() + HOVER_OFFSET
+
 	var ship := controller.ship
-	var target := controller.selected
+	# The selection may have just left the system (jumped out and been freed).
+	var target: Node3D = controller.selected if is_instance_valid(controller.selected) else null
 	var lines := PackedStringArray([
 		"%s   speed %3.0f / %.0f m/s" % [ship.display_name, ship.speed, ship.max_speed],
 		"Order: %s" % ship.get_order_label(),
@@ -55,6 +72,12 @@ func _process(_delta: float) -> void:
 		var gap := ship.global_position.distance_to(target.global_position) \
 				- Autopilot.radius_of(target) - ship.radius
 		lines.append("Target: %s   %.0f m" % [Autopilot.name_of(target), gap])
+		var other := target as Ship
+		if other != null:
+			var activity := other.get_order_label()
+			if other.cargo > 0.0:
+				activity += "   cargo %.0f / %.0f" % [other.cargo, other.cargo_capacity]
+			lines.append("   " + activity)
 	else:
 		lines.append("Target: none (click an object)")
 	_status.text = "\n".join(lines)

@@ -47,6 +47,14 @@ func _ready() -> void:
 	_rebuild()
 
 
+func get_rocks() -> Array[Asteroid]:
+	var rocks: Array[Asteroid] = []
+	for child in get_children():
+		if child is Asteroid and not child.is_queued_for_deletion():
+			rocks.append(child)
+	return rocks
+
+
 func _queue_rebuild() -> void:
 	if is_node_ready():
 		_rebuild()

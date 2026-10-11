@@ -204,14 +204,17 @@ static func circle_clearance(center: Vector3, normal: Vector3, circle_radius: fl
 
 
 ## Collision/avoidance radius of any space object (0 if it has none).
-static func radius_of(node: Node) -> float:
-	if node != null and node.has_method(&"get_nav_radius"):
+## Deliberately untyped: callers may hold a reference to an object that has been freed
+## (e.g. a ship that jumped out), and a typed parameter would fail before the check below.
+static func radius_of(node: Variant) -> float:
+	if is_instance_valid(node) and node.has_method(&"get_nav_radius"):
 		return node.get_nav_radius()
 	return 0.0
 
 
-## Display name of any space object, for UI.
-static func name_of(node: Node) -> String:
+## Display name of any space object, for UI. "-" for nothing or a freed object.
+## Untyped for the same reason as radius_of().
+static func name_of(node: Variant) -> String:
 	if not is_instance_valid(node):
 		return "-"
 	var display_name = node.get(&"display_name")

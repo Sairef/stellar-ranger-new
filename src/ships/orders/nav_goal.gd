@@ -12,6 +12,8 @@ var arrive: bool
 var ignore: Node3D
 ## Speed limit for this goal in m/s. The ship's own max speed still applies.
 var speed: float
+## Optional point (Vector3) the ship turns its nose to once it has stopped, e.g. a rock to mine.
+var face_point: Variant = null
 
 
 func _init(p_point: Vector3, p_arrive := true, p_ignore: Node3D = null, p_speed := INF) -> void:
