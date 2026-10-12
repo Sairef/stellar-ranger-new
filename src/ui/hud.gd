@@ -1,7 +1,8 @@
 class_name Hud
 extends CanvasLayer
 
-## Minimal flight HUD: ship status, selected target, command buttons and controls help.
+## Minimal flight HUD: ship status, selected target, command buttons and controls help,
+## plus a banner with the system's alert state and announcements (see SystemSecurity).
 ## Built in code for now; it will become a proper scene once the UI grows.
 
 @export var controller: PlayerController
@@ -12,12 +13,18 @@ const HELP_TEXT := "LMB: select   Double click: approach object / fly to point  
 
 ## Offset of the hover name from the mouse cursor, in pixels.
 const HOVER_OFFSET := Vector2(18, 10)
+## Distance of the alert banner's bottom edge from the bottom of the screen (above the controls
+## help line, where it covers neither the side panels nor the ship in the middle), in pixels.
+const BANNER_BOTTOM := 48.0
+const ALERT_COLOR := Color(1.0, 0.45, 0.35)
+const CALM_COLOR := Color(0.6, 1.0, 0.6)
 
 var _status: Label
 var _approach_button: Button
 var _orbit_button: Button
 var _attack_button: Button
 var _hover_label: Label
+var _banner: Label
 
 
 func _ready() -> void:
@@ -55,8 +62,21 @@ func _ready() -> void:
 	_hover_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	add_child(_hover_label)
 
+	_banner = Label.new()
+	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner.add_theme_font_size_override("font_size", 22)
+	_banner.add_theme_constant_override("outline_size", 8)
+	_banner.add_theme_color_override("font_outline_color", Color.BLACK)
+	add_child(_banner)
+	_banner.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_banner.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	_banner.offset_bottom = -BANNER_BOTTOM
+
 
 func _process(_delta: float) -> void:
+	_update_banner()
 	var hovered := controller.hovered
 	_hover_label.visible = hovered != null
 	if hovered != null:
@@ -96,6 +116,20 @@ func _process(_delta: float) -> void:
 	_approach_button.disabled = not has_ship or target == null
 	_orbit_button.disabled = not has_ship or target == null
 	_attack_button.disabled = not has_ship or not controller.can_attack_selected()
+
+
+func _update_banner() -> void:
+	var security := SystemSecurity.of(self)
+	var lines := PackedStringArray()
+	if security != null:
+		var announcement := security.current_announcement()
+		if not announcement.is_empty():
+			lines.append(announcement)
+		if security.alert:
+			var count := security.threats().size()
+			lines.append("ALERT: %d hostile ships in the system" % count if count > 0 else "ALERT")
+	_banner.text = "\n".join(lines)
+	_banner.modulate = ALERT_COLOR if security != null and security.alert else CALM_COLOR
 
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:

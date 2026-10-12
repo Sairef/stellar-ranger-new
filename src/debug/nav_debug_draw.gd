@@ -84,7 +84,7 @@ func _process(delta: float) -> void:
 
 func _record_trails(ships: Array, delta: float) -> void:
 	for id: int in _trails.keys():
-		if World.find(id) == null:
+		if WorldRegistry.find(id) == null:
 			_trails.erase(id)
 	_trail_timer -= delta
 	if _trail_timer > 0.0:

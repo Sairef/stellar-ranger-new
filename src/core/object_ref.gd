@@ -14,13 +14,13 @@ var id := 0
 ## A reference to `object`; to nothing if it is null or already freed.
 static func to(object: Variant) -> ObjectRef:
 	var ref := ObjectRef.new()
-	ref.id = World.id_of(object)
+	ref.id = WorldRegistry.id_of(object)
 	return ref
 
 
 ## The live object, or null.
 func resolve() -> Node3D:
-	return World.find(id) as Node3D if id != 0 else null
+	return WorldRegistry.find(id) as Node3D if id != 0 else null
 
 
 ## True if this refers to `object` (and it is alive).

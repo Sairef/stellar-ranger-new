@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://src/debug/nav_debug_draw.gd" id="8_debug_draw"]
 [ext_resource type="Script" path="res://src/ui/hud.gd" id="9_hud"]
 [ext_resource type="Script" path="res://src/ui/debug_panel.gd" id="10_debug_panel"]
+[ext_resource type="Script" path="res://src/debug/player_respawner.gd" id="11_respawner"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("2_sky")
@@ -26,11 +27,11 @@ ambient_light_energy = 0.35
 tonemap_mode = 2
 glow_enabled = true
 
-[node name="CombatSandbox" type="Node3D" node_paths=PackedStringArray("controller", "camera", "debug_panel", "ships_root")]
+[node name="CombatSandbox" type="Node3D" node_paths=PackedStringArray("controller", "debug_panel", "respawner", "ships_root")]
 script = ExtResource("1_sandbox")
 controller = NodePath("PlayerController")
-camera = NodePath("Camera")
 debug_panel = NodePath("DebugPanel")
+respawner = NodePath("PlayerRespawner")
 ships_root = NodePath("Ships")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
@@ -104,3 +105,10 @@ debug_draw = NodePath("../NavDebugDraw")
 
 [node name="DebugPanel" type="CanvasLayer" parent="."]
 script = ExtResource("10_debug_panel")
+
+[node name="PlayerRespawner" type="Node" parent="." node_paths=PackedStringArray("controller", "camera", "debug_panel", "ships_root")]
+script = ExtResource("11_respawner")
+controller = NodePath("../PlayerController")
+camera = NodePath("../Camera")
+debug_panel = NodePath("../DebugPanel")
+ships_root = NodePath("../Ships")

@@ -9,7 +9,7 @@ extends SpaceBody
 ## at a time may be inside. Departing ships fly into the center and jump out of the system
 ## (see JumpOrder); arriving ships appear in the center and fly out the front (try_receive()).
 ## The collision shape is the ring itself, so the opening is free to fly through.
-## `active` brightens the membrane, e.g. when something big is coming through.
+## `active` makes the membrane bright and pulsing, e.g. while an invasion fleet is coming through.
 
 ## Name of the system on the other side.
 @export var destination := "Unknown"
@@ -32,6 +32,10 @@ const ACTIVE_INTENSITY := 1.0
 ## Membrane brightness right after a ship jumps, fading over FLASH_TIME seconds.
 const FLASH_INTENSITY := 3.0
 const FLASH_TIME := 1.2
+## Pulses per second of an active membrane, in radians per second.
+const PULSE_SPEED := 6.0
+## Radius of the ring's opening, as a fraction of the gate radius.
+const OPENING := 0.78
 ## Corridor used by arriving ships: the front side, facing the system center.
 const ARRIVAL_CORRIDOR := 0
 ## How far below a corridor's outer end ships wait for their turn, in meters.
@@ -44,10 +48,15 @@ var _flash := 0.0
 
 
 func _process(delta: float) -> void:
-	if Engine.is_editor_hint() or _flash <= 0.0:
+	if Engine.is_editor_hint() or (_flash <= 0.0 and not active):
 		return
 	_flash = maxf(0.0, _flash - delta / FLASH_TIME)
 	_update_membrane()
+
+
+## Radius of the free opening inside the ring, in meters.
+func opening_radius() -> float:
+	return OPENING * radius
 
 
 func get_corridor_count() -> int:
@@ -122,14 +131,17 @@ func _build_collision() -> void:
 func _update_membrane() -> void:
 	if _membrane == null:
 		return
-	var base := ACTIVE_INTENSITY if active else IDLE_INTENSITY
+	var base := IDLE_INTENSITY
+	if active:
+		var seconds := Time.get_ticks_msec() / 1000.0
+		base = ACTIVE_INTENSITY * (0.75 + 0.25 * sin(seconds * PULSE_SPEED))
 	_membrane.set_shader_parameter(&"energy_color", energy_color)
 	_membrane.set_shader_parameter(&"intensity", lerpf(base, FLASH_INTENSITY, _flash))
 
 
 func _ring_mesh() -> TorusMesh:
 	var torus := TorusMesh.new()
-	torus.inner_radius = 0.78 * radius
+	torus.inner_radius = OPENING * radius
 	torus.outer_radius = 0.9 * radius
 	torus.rings = 64
 	torus.ring_segments = 10

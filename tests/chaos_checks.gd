@@ -2,7 +2,8 @@ extends Node
 
 ## Chaos test for references to world objects (see WorldRegistry and ObjectRef).
 ##
-## The home system runs with its traffic, miners and patrols, plus a few pirates, while random
+## The home system runs with its traffic, miners and patrols, plus a few pirates and an
+## invasion (started at INVASION_TIME), while random
 ## world objects vanish at random moments: ships destroyed or removed outright (docked ones and
 ## the player's ship included), field rocks (maybe the one a miner is working), wrecks, and on
 ## a schedule one gate and one station. Meanwhile the "player" keeps selecting things and giving
@@ -22,6 +23,7 @@ const REMOVE_EVERY := Vector2(0.5, 3.0)
 ## Seconds between player commands.
 const COMMAND_EVERY := 2.0
 const GATE_REMOVAL_TIME := 90.0
+const INVASION_TIME := 20.0
 const STATION_REMOVAL_TIME := 150.0
 const KINDS: Array[String] = [
 	"ship destroyed", "ship removed", "docked ship removed", "rock", "wreck", "gate", "station",
@@ -41,6 +43,8 @@ func _ready() -> void:
 	OS.add_logger(_errors)
 	_rng.seed = 2024
 	_system = load("res://scenes/systems/home_system.tscn").instantiate()
+	var invasion := _system.get_node("Invasion") as Invasion
+	invasion.event_seed = 3
 	add_child(_system)
 	_controller = _system.get_node("PlayerController")
 	_camera = _system.get_node("Camera")
@@ -63,6 +67,8 @@ func _ready() -> void:
 		if time >= next_removal:
 			next_removal = time + _rng.randf_range(REMOVE_EVERY.x, REMOVE_EVERY.y)
 			_remove_something()
+		if invasion.invaders_arrived == 0 and not invasion.is_running() and time >= INVASION_TIME:
+			invasion.start()
 		if arrivals_at_gate_removal < 0 and time >= GATE_REMOVAL_TIME:
 			arrivals_at_gate_removal = spawner.arrivals
 			_remove(_system.get_node("Gates/EastGate"), "gate")
@@ -91,6 +97,7 @@ func _ready() -> void:
 	var stuck := docked_at_removed_station.filter(func(ship: Ship) -> bool: return is_instance_valid(ship))
 	_check(stuck.is_empty(), "ships docked in the vanished station vanished with it (%d of %d left)"
 			% [stuck.size(), docked_at_removed_station.size()])
+	_check(invasion.invaders_arrived > 0, "the invasion happened (%d invaders came)" % invasion.invaders_arrived)
 	_check(get_tree().get_node_count_in_group(Autopilot.SHIP_GROUP) > 0,
 			"the system keeps going (%d ships in space)" % get_tree().get_node_count_in_group(Autopilot.SHIP_GROUP))
 	print("\n%d passed, %d failed" % [_passed, _failed])

@@ -13,6 +13,9 @@
 [ext_resource type="Script" path="res://src/ships/miner_routine.gd" id="11_miner"]
 [ext_resource type="Script" path="res://src/ships/traffic_spawner.gd" id="12_spawner"]
 [ext_resource type="Script" path="res://src/ui/debug_panel.gd" id="13_debug_panel"]
+[ext_resource type="Script" path="res://src/world/system_security.gd" id="14_security"]
+[ext_resource type="Script" path="res://src/world/invasion.gd" id="15_invasion"]
+[ext_resource type="Script" path="res://src/debug/player_respawner.gd" id="16_respawner"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("1_sky")
@@ -40,6 +43,9 @@ light_color = Color(1, 0.95, 0.85, 1)
 light_energy = 1.4
 shadow_enabled = true
 directional_shadow_max_distance = 4000.0
+
+[node name="SystemSecurity" type="Node" parent="."]
+script = ExtResource("14_security")
 
 [node name="Stations" type="Node3D" parent="."]
 
@@ -88,6 +94,7 @@ position = Vector3(-1200, 80, 930)
 rotation = Vector3(0, -0.911, 0)
 display_name = "You"
 hull_color = Color(0.3, 0.75, 1, 1)
+faction = &"player"
 
 [node name="PatrolVigil" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(1800, -150, -700)
@@ -99,6 +106,7 @@ turn_rate = 2.0
 
 [node name="Routine" type="Node" parent="Ships/PatrolVigil"]
 script = ExtResource("6_routine")
+defend = true
 waypoints = Array[NodePath]([NodePath("../../../Gates/NorthGate"), NodePath("../../../Gates/WestGate"), NodePath("../../../Stations/BastionOutpost")])
 distance = 100.0
 
@@ -112,6 +120,7 @@ turn_rate = 2.0
 
 [node name="Routine" type="Node" parent="Ships/PatrolWard"]
 script = ExtResource("6_routine")
+defend = true
 waypoints = Array[NodePath]([NodePath("../../../Gates/EastGate"), NodePath("../../../Stations/BastionOutpost")])
 distance = 100.0
 
@@ -208,3 +217,18 @@ debug_draw = NodePath("../NavDebugDraw")
 [node name="DebugPanel" type="CanvasLayer" parent="." node_paths=PackedStringArray("spawner")]
 script = ExtResource("13_debug_panel")
 spawner = NodePath("../TrafficSpawner")
+
+[node name="Invasion" type="Node" parent="." node_paths=PackedStringArray("debug_panel")]
+script = ExtResource("15_invasion")
+gates = Array[NodePath]([NodePath("../Gates/NorthGate"), NodePath("../Gates/EastGate"), NodePath("../Gates/WestGate")])
+defense_station = NodePath("../Stations/BastionOutpost")
+ships_root = NodePath("../Ships")
+debug_panel = NodePath("../DebugPanel")
+
+[node name="PlayerRespawner" type="Node" parent="." node_paths=PackedStringArray("controller", "camera", "debug_panel", "ships_root")]
+script = ExtResource("16_respawner")
+controller = NodePath("../PlayerController")
+camera = NodePath("../Camera")
+debug_panel = NodePath("../DebugPanel")
+ships_root = NodePath("../Ships")
+spawn_point = Vector3(-1200, 80, 930)

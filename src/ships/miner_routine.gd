@@ -4,6 +4,8 @@ extends Node
 ## NPC miner brain, placed as a child of a Ship: undock from the home station, fly into the
 ## asteroid field, mine a rock until the hold is full, fly home, dock and unload. Forever.
 ## Miners claim their rock, so two miners never work the same one.
+## On alert (SystemSecurity) a miner in space drops its work and runs home to dock; a docked miner
+## stays docked until the all clear.
 
 const GROUP := &"miners"
 
@@ -28,6 +30,8 @@ var _ship: Ship
 var _rng := RandomNumberGenerator.new()
 var _step := Step.GO_TO_ROCK
 var _rock := ObjectRef.new()
+## Already running home because of the current alert.
+var _sheltering := false
 
 
 func _ready() -> void:
@@ -56,11 +60,18 @@ func _start_docked() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	var security := SystemSecurity.of(self)
+	var alert := security != null and security.alert
 	if _ship.is_docked():
-		undock_in -= delta
-		if undock_in <= 0.0:
-			_ship.try_undock()
+		if not alert:
+			undock_in -= delta
+			if undock_in <= 0.0:
+				_ship.try_undock()
 		return
+	if alert:
+		_shelter()
+		return
+	_sheltering = false
 	if _ship.current_order != null:
 		return
 
@@ -87,6 +98,22 @@ func _physics_process(delta: float) -> void:
 			_step = Step.GO_TO_ROCK
 
 
+## Runs home and docks, once per alert.
+func _shelter() -> void:
+	var order := _ship.current_order
+	if _sheltering and order != null:
+		return  # Already on the way home.
+	if order != null and not order.is_interruptible():
+		return  # Finish the corridor first.
+	var station := get_node_or_null(home) as SpaceBody
+	if station == null:
+		return
+	_sheltering = true
+	_release_rock()
+	_ship.give_order(DockOrder.new(station))
+	_step = Step.GO_TO_ROCK
+
+
 func _on_docked(_station: SpaceBody) -> void:
 	_ship.cargo = 0.0  # Unloaded while docked.
 	_step = Step.GO_TO_ROCK
@@ -98,15 +125,15 @@ func _claim_rock() -> Asteroid:
 	if area == null:
 		return null
 	var free_rocks: Array[Asteroid] = []
-	var me := World.id_of(_ship)
+	var me := WorldRegistry.id_of(_ship)
 	for rock in area.get_rocks():
-		var miner: int = _claimed_rocks.get(World.id_of(rock), 0)
-		if miner == 0 or miner == me or World.find(miner) == null:
+		var miner: int = _claimed_rocks.get(WorldRegistry.id_of(rock), 0)
+		if miner == 0 or miner == me or WorldRegistry.find(miner) == null:
 			free_rocks.append(rock)
 	if free_rocks.is_empty():
 		return null
 	var rock := free_rocks[_rng.randi() % free_rocks.size()]
-	_claimed_rocks[World.id_of(rock)] = me
+	_claimed_rocks[WorldRegistry.id_of(rock)] = me
 	return rock
 
 

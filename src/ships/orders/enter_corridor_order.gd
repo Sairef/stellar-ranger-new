@@ -65,6 +65,10 @@ func is_complete(_ship: Ship) -> bool:
 	return phase == Phase.DONE or structure == null
 
 
+func is_interruptible() -> bool:
+	return phase != Phase.ENTERING
+
+
 ## Override: the ship has reached the inner end of the corridor (which it still holds).
 func _on_inside(_ship: Ship, _body: SpaceBody) -> void:
 	pass

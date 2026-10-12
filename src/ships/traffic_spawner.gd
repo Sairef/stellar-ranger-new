@@ -50,6 +50,9 @@ func _physics_process(delta: float) -> void:
 	_next_arrival -= delta
 	if _next_arrival > 0.0:
 		return
+	var security := SystemSecurity.of(self)
+	if security != null and security.alert:
+		return  # Nobody flies into a system on alert.
 	_next_arrival = _rng.randf_range(arrival_interval.x, arrival_interval.y)
 	if get_trader_count() >= max_traders:
 		return

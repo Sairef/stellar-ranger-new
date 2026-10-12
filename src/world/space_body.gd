@@ -38,12 +38,12 @@ var _corridor_locks := {}
 
 func _enter_tree() -> void:
 	if not Engine.is_editor_hint():
-		World.register(self)
+		WorldRegistry.register(self)
 
 
 func _exit_tree() -> void:
 	if not Engine.is_editor_hint():
-		World.unregister(self)
+		WorldRegistry.unregister(self)
 
 
 func _ready() -> void:

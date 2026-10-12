@@ -1,0 +1,9 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://tests/startup_checks.gd" id="1_checks"]
+[ext_resource type="PackedScene" path="res://scenes/systems/home_system.tscn" id="2_system"]
+
+[node name="StartupChecks" type="Node"]
+script = ExtResource("1_checks")
+
+[node name="HomeSystem" parent="." instance=ExtResource("2_system")]

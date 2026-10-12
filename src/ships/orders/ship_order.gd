@@ -28,6 +28,13 @@ func get_goal(_ship: Ship) -> NavGoal:
 	return null
 
 
+## False while the order must not be replaced by an NPC brain, e.g. in the middle of a
+## corridor inside a station or gate, where turning around would hit the structure.
+## (The player can still give any order at any time.)
+func is_interruptible() -> bool:
+	return true
+
+
 ## The ship the weapons should fire at while this order runs, if any.
 func get_attack_target() -> Ship:
 	return null
