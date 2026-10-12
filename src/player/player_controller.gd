@@ -10,6 +10,11 @@ extends Node
 ## The object under the cursor gets a faint ring (`hovered`), so it is clear what a click selects.
 ## The ship, the selection and the hovered object are kept as ObjectRefs: once one of them is
 ## gone (destroyed, jumped out), it simply reads as null.
+##
+## Auto-engage: when the ship has no order and its weapon opens fire at a new hostile on its own,
+## the ship attacks it (comes into range and circles it), so a fight goes on after the first kill.
+## It never overrides an order the player gave, and after Stop the ship does not go back for the
+## target it was fighting: only a hostile it has not fought yet starts a new attack.
 
 signal selection_changed(target: Node3D)
 
@@ -19,7 +24,10 @@ signal selection_changed(target: Node3D)
 		return _ship.resolve() as Ship if _ship != null else null
 	set(value):
 		_ship = ObjectRef.to(value)
+		_engaged = ObjectRef.new()
 @export var camera: Camera3D
+## See "Auto-engage" above.
+@export var auto_engage := true
 ## Distance from the target's surface for the Approach command, in meters.
 @export var approach_distance := 50.0
 ## Distance from the target's surface for the Orbit command, in meters.
@@ -48,6 +56,8 @@ const MAX_MOVE_DISTANCE := 5000.0
 var _ship: ObjectRef = null
 var _selected := ObjectRef.new()
 var _hovered := ObjectRef.new()
+## The last ship the player's ship attacked, by order or by auto-engage.
+var _engaged := ObjectRef.new()
 var _press_position := Vector2.ZERO
 var _marker: Sprite3D
 var _hover_marker: Sprite3D
@@ -94,6 +104,29 @@ func _process(_delta: float) -> void:
 	var hover := hovered
 	_place_ring(_marker, current)
 	_place_ring(_hover_marker, hover if hover != current else null)
+
+
+func _physics_process(_delta: float) -> void:
+	if auto_engage and has_ship():
+		_auto_engage(ship)
+
+
+func _auto_engage(own: Ship) -> void:
+	if own.current_order != null:
+		var fighting := own.current_order.get_attack_target()
+		if fighting != null and not _engaged.points_to(fighting):
+			_engaged = ObjectRef.to(fighting)
+		return  # Never override an order.
+	var weapon := own.get_weapon()
+	if weapon == null or not weapon.enabled:
+		return
+	var target := weapon.choose_target()
+	if target == null or _engaged.points_to(target):
+		return
+	_engaged = ObjectRef.to(target)
+	own.give_order(AttackOrder.new(target))
+	if selected == null:
+		select(target)
 
 
 func select(target: Node3D) -> void:

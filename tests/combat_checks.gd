@@ -23,6 +23,7 @@ func _ready() -> void:
 	await _out_of_range()
 	await _pirate_meets_armed_trader()
 	await _combat_sandbox_scene()
+	await _auto_engage()
 	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
@@ -139,6 +140,47 @@ func _combat_sandbox_scene() -> void:
 	await _end()
 
 
+## An idle player ship attacks hostiles its weapon opens fire at, but never overrides an order.
+func _auto_engage() -> void:
+	_begin("Auto-engage: the idle player ship attacks new hostiles")
+	var sandbox := load("res://scenes/sandbox/combat_sandbox.tscn").instantiate() as CombatSandbox
+	_world.add_child(sandbox)
+	var controller := sandbox.controller
+	var player := controller.ship
+	# Unarmed pirates: the player must survive the whole scenario.
+	var pirate := sandbox.get_node("Ships/Pirate1") as Ship
+	pirate.get_weapon().enabled = false
+	var stats := {"kills": 0}
+	pirate.destroyed.connect(func(_ship: Ship, _wreck: Wreck) -> void: stats.kills += 1)
+	var first := ObjectRef.to(pirate)
+	var time: float = await _simulate(60.0, func() -> bool: return _attacking(controller) == "Pirate 1")
+	_check(time > 0.0, "the idle ship attacks the pirate that came into range (%.1f s)" % time)
+	_check(Autopilot.name_of(controller.selected) == "Pirate 1", "and selects it, as nothing was selected")
+
+	player.give_order(MoveToOrder.new(player.global_position + Vector3(400, 0, 0)))
+	await _simulate(2.0, func() -> bool: return false)
+	_check(player.current_order is MoveToOrder,
+			"an order from the player is never overridden (%s)" % player.get_order_label())
+
+	controller.stop()
+	await _simulate(3.0, func() -> bool: return false)
+	_check(player.current_order == null and stats.kills == 0
+			and Autopilot.name_of(player.get_weapon().choose_target()) == "Pirate 1",
+			"after Stop it keeps firing at the pirate but does not go after it (%s)" % player.get_order_label())
+
+	var second := sandbox.spawn_pirate()
+	second.get_weapon().enabled = false
+	var second_name := second.display_name
+	player.get_weapon().damage = 5.0
+	controller.select(first.resolve())
+	controller.attack_selected()
+	time = await _simulate(60.0, func() -> bool: return stats.kills > 0)
+	_check(time > 0.0, "the player kills the pirate it was ordered to attack (%.1f s)" % time)
+	time = await _simulate(30.0, func() -> bool: return _attacking(controller) == second_name)
+	_check(time >= 0.0, "then goes after the next hostile its weapon fires at: %s (%.1f s)" % [second_name, time])
+	await _end()
+
+
 # --- Helpers ---------------------------------------------------------------------------------
 
 func _begin(title: String) -> void:
@@ -167,6 +209,14 @@ func _spawn_ship(ship_name: String, position: Vector3, faction: StringName) -> S
 			print("    contact: %s hit %s | %s | speed %.1f" % [ship_name,
 					Autopilot.name_of(collider), ship.get_order_label(), ship.speed]))
 	return ship
+
+
+## Name of the ship the player's ship is attacking, or "".
+func _attacking(controller: PlayerController) -> String:
+	if not controller.has_ship() or controller.ship.current_order == null:
+		return ""
+	var target := controller.ship.current_order.get_attack_target()
+	return Autopilot.name_of(target) if target != null else ""
 
 
 ## Advances the simulation until `done` returns true or `timeout` seconds pass.

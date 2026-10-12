@@ -38,6 +38,7 @@ A single-player 3D space sandbox where the galaxy lives by its own rules and doe
 - Command-based, not twitch-based: approach, orbit, keep at range, attack, dock, mine, loot, jump through gate.
 - The player uses the **same order system as the AI**. A player is "an NPC whose decisions are made by a human".
 - This scales naturally into fleet management: the player issues the same orders to owned ships.
+- **Auto-engage.** When the player's ship has no order and its weapon opens fire at a hostile it has not fought yet, the ship attacks it (comes into range and circles it), so a fight goes on after the first kill. It never overrides an order the player gave, and after Stop the ship does not go back for the target it was fighting. This is a decision of the player's "brain" (`PlayerController`), issued as an ordinary Attack order; NPC brains make their own (`CombatRoutine` hunts within detection range).
 
 ## Defeat and loss
 
