@@ -76,8 +76,8 @@ func launch(wreck: Wreck) -> Ship:
 	drone.faction = _ship.faction
 	drone.hull_color = _ship.hull_color.lightened(0.4)
 	drone.radius = DRONE_RADIUS
-	drone.max_shield = 4.0
-	drone.max_armor = 2.0
+	drone.max_shield = 8.0
+	drone.max_armor = 4.0
 	drone.max_speed = 150.0
 	drone.acceleration = 80.0
 	drone.turn_rate = 3.0

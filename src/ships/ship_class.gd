@@ -22,8 +22,8 @@ const POWER_FACTOR := {Size.SMALL: 0.7, Size.MEDIUM: 1.0, Size.LARGE: 1.3}
 const SPEED := 120.0
 const ACCELERATION := 40.0
 const TURN_RATE := 1.5
-const SHIELD := 20.0
-const ARMOR := 10.0
+const SHIELD := 40.0
+const ARMOR := 20.0
 const DAMAGE := 1.0
 
 

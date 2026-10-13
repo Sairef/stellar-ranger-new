@@ -42,15 +42,18 @@ func _damage_layers() -> void:
 	var stats := {"wreck": null}
 	ship.destroyed.connect(func(_ship: Ship, wreck: Wreck) -> void: stats.wreck = wreck)
 
-	for i in 20:
+	var shield_hits := int(ship.max_shield)
+	var armor_hits := int(ship.max_armor)
+	for i in shield_hits:
 		ship.take_hit(1.0, attacker)
-	_check(ship.shield == 0.0 and ship.armor == 10.0,
-			"20 hits empty the shield and leave the armor (%s)" % ship.get_health_text())
-	for i in 9:
+	_check(ship.shield == 0.0 and ship.armor == ship.max_armor,
+			"%d hits empty the shield and leave the armor (%s)" % [shield_hits, ship.get_health_text()])
+	for i in armor_hits - 1:
 		ship.take_hit(1.0, attacker)
-	_check(ship.armor == 1.0 and ship.is_in_space(), "9 more hits leave 1 armor (%s)" % ship.get_health_text())
+	_check(ship.armor == 1.0 and ship.is_in_space(),
+			"%d more hits leave 1 armor (%s)" % [armor_hits - 1, ship.get_health_text()])
 	ship.take_hit(1.0, attacker)
-	_check(stats.wreck != null, "the 30th hit destroys the ship")
+	_check(stats.wreck != null, "the %dth hit destroys the ship" % (shield_hits + armor_hits))
 	await get_tree().process_frame
 	_check(not is_instance_valid(ship), "the ship is gone")
 	var wreck := stats.wreck as Wreck
@@ -71,11 +74,12 @@ func _duel() -> void:
 		if hit:
 			stats.hits += 1)
 	target.destroyed.connect(func(_ship: Ship, _wreck: Wreck) -> void: stats.destroyed = true)
+	var needed := int(target.max_shield + target.max_armor)
 	attacker.give_order(AttackOrder.new(target))
 
 	var time: float = await _simulate(90.0, func() -> bool: return stats.destroyed)
 	_check(time > 0.0, "the target was destroyed in %.1f s" % time)
-	_check(stats.hits == 30, "it took exactly 30 hits: 20 shield + 10 armor (%d)" % stats.hits)
+	_check(stats.hits == needed, "it took exactly %d hits: shield + armor (%d)" % [needed, stats.hits])
 	var ratio := float(stats.hits) / maxf(1.0, stats.shots)
 	_check(ratio >= MIN_HIT_RATIO and ratio <= MAX_HIT_RATIO,
 			"about 75%% of shots hit (%d of %d, %.0f%%)" % [stats.hits, stats.shots, ratio * 100.0])

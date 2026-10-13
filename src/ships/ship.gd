@@ -67,8 +67,8 @@ const UNDOCK_CLEARANCE := 20.0
 
 @export_group("Durability")
 ## Damage goes to the shield first, then to the armor. No armor left: the ship is destroyed.
-@export var max_shield := 20.0
-@export var max_armor := 10.0
+@export var max_shield := 40.0
+@export var max_armor := 20.0
 
 @export_group("Flight")
 ## Top speed in m/s.
