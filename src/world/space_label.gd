@@ -4,10 +4,15 @@ extends RefCounted
 
 ## Factory for the floating name labels above ships and asteroids.
 ## Labels keep a constant size on screen and are visible through other objects.
+## They live on their own render layer, so a camera can leave them out (the tactical map does).
+
+## Render layer bit of the labels.
+const LAYER := 2
 
 
 static func create(text: String, object_radius: float) -> Label3D:
 	var label := Label3D.new()
+	label.layers = LAYER
 	label.text = text
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	label.fixed_size = true

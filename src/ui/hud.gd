@@ -2,15 +2,16 @@ class_name Hud
 extends CanvasLayer
 
 ## Minimal flight HUD: ship status, faction credits, selected target, command buttons and
-## controls help, a banner with the system's alert state and announcements (see SystemSecurity),
-## and the cargo window (I, or by itself when looting stops because the hold is full).
+## controls help, the list of hostile ships (HostileList), a banner with the system's alert
+## state and announcements (see SystemSecurity), the cargo window (I, or by itself when looting
+## stops because the hold is full) and the tactical map (M, TacticalMap).
 ## Built in code for now; it will become a proper scene once the UI grows.
 
 @export var controller: PlayerController
 @export var debug_draw: NavDebugDraw
 
 const HELP_TEXT := "LMB: select   Double click: approach object / fly to point   " \
-		+ "RMB drag / arrows: rotate camera   Wheel: zoom   F3: navigation debug"
+		+ "RMB drag / arrows: rotate camera   Wheel: zoom   M: map   F3: navigation debug"
 
 ## Offset of the hover name from the mouse cursor, in pixels.
 const HOVER_OFFSET := Vector2(18, 10)
@@ -21,6 +22,8 @@ const ALERT_COLOR := Color(1.0, 0.45, 0.35)
 const CALM_COLOR := Color(0.6, 1.0, 0.6)
 ## Seconds the last faction credits reward stays on screen.
 const REWARD_NOTE_TIME := 4.0
+## Room left for the controls help line at the bottom, in pixels.
+const HELP_LINE_HEIGHT := 32.0
 
 var _status: Label
 var _approach_button: Button
@@ -29,6 +32,8 @@ var _attack_button: Button
 var _loot_button: Button
 var _loot_all_button: Button
 var _cargo_window: CargoWindow
+var _hostile_list: HostileList
+var _map: TacticalMap
 var _hover_label: Label
 var _banner: Label
 var _reward_note := ""
@@ -36,6 +41,10 @@ var _reward_note_time := 0.0
 
 
 func _ready() -> void:
+	_map = TacticalMap.new()
+	_map.controller = controller
+	add_child(_map)
+
 	var panel := PanelContainer.new()
 	panel.position = Vector2(12, 12)
 	add_child(panel)
@@ -60,6 +69,7 @@ func _ready() -> void:
 	_loot_button = _add_button(more, "Loot [R]", controller.loot_selected)
 	_loot_all_button = _add_button(more, "Loot all [T]", controller.loot_all)
 	_add_button(more, "Cargo [I]", _toggle_cargo)
+	_add_button(more, "Map [M]", _map.toggle)
 	if debug_draw != null:
 		_add_button(more, "Debug [F3]", debug_draw.toggle)
 
@@ -78,6 +88,15 @@ func _ready() -> void:
 	add_child(help)
 	help.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 
+	_hostile_list = HostileList.new()
+	_hostile_list.controller = controller
+	add_child(_hostile_list)
+	_hostile_list.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
+	_hostile_list.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	# Above the controls help line.
+	_hostile_list.offset_top -= HELP_LINE_HEIGHT
+	_hostile_list.offset_bottom -= HELP_LINE_HEIGHT
+
 	_hover_label = Label.new()
 	_hover_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hover_label.add_theme_constant_override("outline_size", 6)
@@ -95,6 +114,8 @@ func _ready() -> void:
 	_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_banner.offset_bottom = -BANNER_BOTTOM
+	# Centered in the space right of the hostile list, so it never covers the list.
+	_banner.offset_left = _hostile_list.offset_right + 12.0
 
 
 func _unhandled_input(event: InputEvent) -> void:

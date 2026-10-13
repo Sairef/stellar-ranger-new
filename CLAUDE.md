@@ -30,7 +30,9 @@ currencies or balancing unless asked. Propose the bare-minimum version of a feat
   dropped cargo containers: things to loot); `AsteroidField`; `SystemSecurity` (alert state NPCs
   react to), `Invasion` (the event, started by a debug button), `SalvageService` (the scavenger);
   labels, sky and gate shaders. `src/player/` — input and camera. `src/ui/` — HUD, the cargo
-  window and the debug panel (time scale, traffic stats; home of manual debug triggers).
+  window, the hostile list, the tactical map (M: top-down view with icons; its camera replaces
+  the controller's while open) and the debug panel (time scale, traffic stats; home of manual
+  debug triggers).
   `src/debug/` — debug overlays, test-bed scene scripts, `PlayerRespawner`.
 - `scenes/systems/home_system.tscn` — main scene: the first star system.
 - `scenes/sandbox/flight_sandbox.tscn` — a small test bed for flight and navigation.
@@ -47,7 +49,7 @@ D:/Godot/Godot_v4.7.2-stable_win64_console.exe --headless --path . --fixed-fps 6
 
 Exit code 0 means all scenarios passed. Run `--headless --path . --import` first if new
 `class_name` scripts were added while the editor was closed. Camera controls have their own
-checks in `res://tests/camera_checks.tscn`, mouse picking in `res://tests/picking_checks.tscn`,
+checks in `res://tests/camera_checks.tscn`, mouse picking (3D view and map) in `res://tests/picking_checks.tscn`,
 combat in `res://tests/combat_checks.tscn`, loot (cargo, drones, loot orders, the scavenger) in
 `res://tests/loot_checks.tscn`, the invasion in `res://tests/invasion_checks.tscn`,
 the game as it really boots in `res://tests/startup_checks.tscn` (its main scene contains the

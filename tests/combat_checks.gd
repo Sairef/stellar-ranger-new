@@ -25,6 +25,7 @@ func _ready() -> void:
 	await _combat_sandbox_scene()
 	await _auto_engage()
 	await _faction_credits()
+	await _hostile_list()
 	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
@@ -226,6 +227,50 @@ func _faction_credits() -> void:
 	time = await _simulate(30.0, func() -> bool: return target.resolve() == null)
 	_check(time > 0.0 and shares["You"] == 2 and controller.faction_credits == 1,
 			"shooting down a neutral earns nothing (%d credits)" % controller.faction_credits)
+	await _end()
+
+
+## The list of hostile ships shows all of them however many, nearest first, and whom each one
+## attacks; a click on a row selects that ship.
+func _hostile_list() -> void:
+	_begin("Hostile list: every hostile ship, nearest first")
+	var sandbox := load("res://scenes/sandbox/combat_sandbox.tscn").instantiate() as CombatSandbox
+	_world.add_child(sandbox)
+	var controller := sandbox.controller
+	controller.auto_engage = false
+	var player := controller.ship
+	for i in 11:
+		var raider := _spawn_ship("Raider %d" % (i + 1),
+				player.global_position + Vector3(150 * i - 750, 0, 2000 + 100 * i), Factions.PIRATE)
+		raider.get_weapon().enabled = false
+	var list: HostileList = null
+	for node in sandbox.find_children("*", "", true, false):
+		if node is HostileList:
+			list = node
+	list.refresh()
+	var rows := list.rows()
+	var hostiles := list.hostiles()
+	_check(rows.size() == 12 and hostiles.size() == 12, "all 12 hostiles are listed (%d rows)" % rows.size())
+	var nearest_first := true
+	for i in range(1, hostiles.size()):
+		var from := player.global_position
+		nearest_first = nearest_first \
+				and from.distance_to(hostiles[i - 1].global_position) <= from.distance_to(hostiles[i].global_position)
+	_check(nearest_first, "nearest first")
+	var ninth := hostiles[8]
+	rows[8].select(0)
+	_check(controller.selected == ninth, "a click on the ninth row selects it (%s)"
+			% Autopilot.name_of(controller.selected))
+
+	var attacker := ObjectRef.to(sandbox.get_node("Ships/Pirate1"))
+	var time: float = await _simulate(60.0, func() -> bool:
+		list.refresh()
+		for row in list.rows():
+			if row.get_text(0) == "Pirate 1" and row.get_text(4) == "YOU":
+				return true
+		return false)
+	_check(time > 0.0 and attacker.resolve() != null, "the pirate attacking the player says YOU (%.1f s)" % time)
+	_check(controller.selected == ninth, "the selection stays on its row while the list refreshes")
 	await _end()
 
 

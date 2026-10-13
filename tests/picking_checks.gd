@@ -1,6 +1,7 @@
 extends Node
 
-## Headless checks for picking objects with the mouse (PlayerController.pick()).
+## Headless checks for picking objects with the mouse (PlayerController.pick()), in the 3D view
+## and on the tactical map.
 ## Run from the project folder:
 ##   godot --headless --path . --fixed-fps 60 res://tests/picking_checks.tscn
 
@@ -57,9 +58,57 @@ func _ready() -> void:
 		await get_tree().process_frame
 	_check(is_same(controller.selected, null), "a destroyed selection is cleared (%s)" % controller.selected)
 
+	await _tactical_map(controller, camera)
+
 	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
+
+
+## M opens the map, and its camera becomes the one clicks are picked with. A tight group of
+## ships far away can be zoomed apart and each ship clicked. M closes the map again.
+func _tactical_map(controller: PlayerController, view_camera: Camera3D) -> void:
+	print("\n== Tactical map")
+	var map := TacticalMap.new()
+	map.controller = controller
+	add_child(map)
+	var group: Array[Ship] = []
+	for i in 5:
+		group.append(_add(ShipScene, Vector3(3000 + 12 * i, 0, -2500 + 9 * (i % 2))) as Ship)
+	_tap(KEY_M)
+	await get_tree().process_frame
+	var map_camera := map.get_camera()
+	_check(map.is_open and controller.camera == map_camera and map_camera.current,
+			"M opens the map, and clicks are picked through its camera")
+
+	map.look_at_point(group[0].global_position)
+	var middle := get_viewport().get_visible_rect().size * 0.5
+	var first_px := map_camera.unproject_position(group[0].global_position)
+	var second_px := map_camera.unproject_position(group[1].global_position)
+	_check(first_px.distance_to(second_px) < PlayerController.PICK_RADIUS,
+			"precondition: from afar a click cannot tell the ships apart (%.1f px apart)"
+			% first_px.distance_to(second_px))
+	for i in 12:
+		map.zoom_at(middle, 1.0 / TacticalMap.ZOOM_STEP)
+	var picked := 0
+	for ship in group:
+		if controller.pick(map_camera.unproject_position(ship.global_position)) == ship:
+			picked += 1
+	_check(picked == group.size(), "zoomed in, a click on each icon picks that ship (%d of %d)" % [picked, group.size()])
+
+	_tap(KEY_M)
+	await get_tree().process_frame
+	_check(not map.is_open and controller.camera == view_camera and view_camera.current,
+			"M closes it and gives the 3D view its camera back")
+	map.queue_free()
+
+
+func _tap(keycode: Key) -> void:
+	for pressed in [true, false]:
+		var event := InputEventKey.new()
+		event.keycode = keycode
+		event.pressed = pressed
+		get_viewport().push_input(event)
 
 
 func _add(scene: PackedScene, position: Vector3) -> Node3D:
