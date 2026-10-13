@@ -44,6 +44,7 @@ func _ready() -> void:
 	await _jump_through_gate(Vector3(300, 0, 900), "from behind")
 	await _gate_arrival()
 	await _target_leaves_the_system()
+	await _approach_ship_flying_past()
 	await _miner_cycle()
 	await _home_system_soak()
 	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
@@ -335,6 +336,49 @@ func _target_leaves_the_system() -> void:
 	await _simulate(0.5, func() -> bool: return false, _no_probe)
 	_check(chaser.current_order == null and orbiter.current_order == null, "both orders ended")
 	_check(chaser.collision_ticks + orbiter.collision_ticks == 0, "no physical contacts")
+	await _end()
+
+
+## Approach a miner that flies back and forth along a line next to the ship, so it passes by
+## again and again. The ship must not back off from it (turning tail and then turning back
+## looked silly): it stays and keeps its nose on the miner. Turns build up and die down instead
+## of starting and stopping at once.
+func _approach_ship_flying_past() -> void:
+	_begin("Approach a ship that flies back and forth past us")
+	var ship := _spawn_ship("Tester", Vector3.ZERO, Vector3.FORWARD)
+	var ends: Array[Vector3] = [Vector3(600, 0, -80), Vector3(-600, 0, -80)]
+	var miner := _spawn_ship("Miner", ends[1], Vector3.RIGHT)
+	miner.radius = 10.0
+	miner.max_speed = 80.0
+	miner.acceleration = 25.0
+	miner.turn_rate = 1.0
+	miner.give_order(MoveToOrder.new(ends[0]))
+	ship.give_order(ApproachOrder.new(miner, 50.0))
+
+	var step := 1.0 / Engine.physics_ticks_per_second
+	var stats := {"leg": 0, "rotation": ship.global_basis.get_rotation_quaternion(), "rate": 0.0,
+			"ramp": 0.0, "tail": 0}
+	var probe := func() -> void:
+		if miner.current_order == null:
+			stats.leg = 1 - stats.leg
+			miner.give_order(MoveToOrder.new(ends[stats.leg]))
+		var rotation := ship.global_basis.get_rotation_quaternion()
+		var previous: Quaternion = stats.rotation
+		var turn := rotation * previous.inverse()
+		var rate := 2.0 * atan2(Vector3(turn.x, turn.y, turn.z).length(), absf(turn.w)) / step
+		stats.ramp = maxf(stats.ramp, absf(rate - stats.rate) / step)
+		stats.rotation = rotation
+		stats.rate = rate
+		var to_miner := miner.global_position - ship.global_position
+		if _gap(ship, miner) < 80.0 and ship.get_forward().angle_to(to_miner) > PI / 2.0:
+			stats.tail += 1
+	await _simulate(30.0, func() -> bool: return false, probe)
+
+	var max_ramp := ship.turn_rate / Ship.TURN_RAMP_TIME
+	_check(stats.tail == 0, "it never turns its back on the miner nearby (%d ticks)" % stats.tail)
+	_check(stats.ramp <= max_ramp * 1.1, "turns build up and die down: at most %.1f rad/s2 (limit %.1f)"
+			% [stats.ramp, max_ramp])
+	_check(ship.collision_ticks + miner.collision_ticks == 0, "no physical contacts")
 	await _end()
 
 

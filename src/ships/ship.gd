@@ -11,6 +11,7 @@ extends CharacterBody3D
 ##
 ## The flight model is "boat-like" on purpose: the ship always moves where its nose points,
 ## turns at a limited rate and slows down in sharp turns. This keeps paths predictable.
+## Turns have some inertia: they build up and die down instead of starting and stopping at once.
 ##
 ## A docked ship is hidden inside its station: no collision, not part of traffic, no orders.
 ## Drones (`is_drone`) are small craft launched by a DroneBay: they have no physical collisions
@@ -30,6 +31,9 @@ signal destroyed(ship: Ship, wreck: Wreck)
 
 ## Fraction of the target speed kept while the nose points straight away from the goal.
 const MIN_TURN_SPEED_FACTOR := 0.05
+## Seconds it takes to build up the full turn rate, and to stop turning from it. Turns that start
+## and stop at once look wooden.
+const TURN_RAMP_TIME := 0.4
 ## Every ship, docked or not. Autopilot.SHIP_GROUP holds only ships out in space.
 const ALL_SHIPS_GROUP := &"all_ships"
 
@@ -97,6 +101,8 @@ var goal_point := Vector3.ZERO
 var collision_ticks := 0
 
 var _face_point: Variant = null
+## Current turning, in radians per second around the axis it points along (global space).
+var _spin := Vector3.ZERO
 var _gone := false
 var _docked := false
 var _dock: ObjectRef = null
@@ -324,6 +330,7 @@ func vanish() -> void:
 func _set_in_space(present: bool) -> void:
 	visible = present
 	speed = 0.0 if not present else speed
+	_spin = Vector3.ZERO
 	velocity = Vector3.ZERO
 	desired_velocity = Vector3.ZERO
 	has_goal = false
@@ -369,17 +376,19 @@ func _process(_delta: float) -> void:
 
 func _fly(delta: float) -> void:
 	var target_speed := desired_velocity.length()
+	var heading := Vector3.ZERO
 	if target_speed > 0.01:
-		var wanted := desired_velocity / target_speed
-		_turn_towards(wanted, delta)
-		# Slow down while the nose points away from where we want to go: makes turns tighter,
-		# and a ship that has to turn around almost pivots in place instead of sweeping a wide arc.
-		var alignment := (get_forward().dot(wanted) + 1.0) * 0.5
-		target_speed *= lerpf(MIN_TURN_SPEED_FACTOR, 1.0, alignment * alignment)
+		heading = desired_velocity / target_speed
 	elif _face_point != null:
 		var to_face: Vector3 = _face_point - global_position
 		if to_face.length_squared() > 1.0:
-			_turn_towards(to_face.normalized(), delta)
+			heading = to_face.normalized()
+	_turn_towards(heading, delta)
+	if target_speed > 0.01:
+		# Slow down while the nose points away from where we want to go: makes turns tighter,
+		# and a ship that has to turn around almost pivots in place instead of sweeping a wide arc.
+		var alignment := (get_forward().dot(heading) + 1.0) * 0.5
+		target_speed *= lerpf(MIN_TURN_SPEED_FACTOR, 1.0, alignment * alignment)
 
 	speed = move_toward(speed, target_speed, acceleration * delta)
 	velocity = get_forward() * speed
@@ -391,21 +400,37 @@ func _fly(delta: float) -> void:
 		speed = clampf(velocity.dot(get_forward()), 0.0, speed)
 
 
+## Turns the nose toward `direction`; a zero direction lets the current turn die down.
+## Like a body with inertia: the turn rate builds up and dies down within TURN_RAMP_TIME, and the
+## turn slows down in time to stop right on the wanted heading.
 func _turn_towards(direction: Vector3, delta: float) -> void:
-	# Slowly roll back toward the galactic "up" so ships do not end up flying upside down.
-	var up := global_basis.y.lerp(Vector3.UP, clampf(delta, 0.0, 1.0)).normalized()
-	for candidate: Vector3 in [up, global_basis.z, global_basis.x]:
-		var ortho := candidate - direction * candidate.dot(direction)
-		if ortho.length_squared() > 0.0001:
-			up = ortho.normalized()
-			break
-
+	var max_change := turn_rate / TURN_RAMP_TIME * delta
+	if max_change <= 0.0:
+		return  # No time passed, or the ship cannot turn at all.
 	var current := global_basis.get_rotation_quaternion()
-	var wanted := Basis.looking_at(direction, up).get_rotation_quaternion()
-	var angle := current.angle_to(wanted)
-	if angle < 0.0001:
-		return
-	global_basis = Basis(current.slerp(wanted, minf(1.0, turn_rate * delta / angle)))
+	var wanted_spin := Vector3.ZERO
+	if direction != Vector3.ZERO:
+		# Slowly roll back toward the galactic "up" so ships do not end up flying upside down.
+		var up := global_basis.y.lerp(Vector3.UP, clampf(delta, 0.0, 1.0)).normalized()
+		for candidate: Vector3 in [up, global_basis.z, global_basis.x]:
+			var ortho := candidate - direction * candidate.dot(direction)
+			if ortho.length_squared() > 0.0001:
+				up = ortho.normalized()
+				break
+		var offset := Basis.looking_at(direction, up).get_rotation_quaternion() * current.inverse()
+		if offset.w < 0.0:
+			offset = -offset  # The short way round.
+		var angle := offset.get_angle()
+		if angle > 0.0001:
+			# The fastest rate that still stops right on the heading, slowing down tick by tick
+			# (about sqrt(2 * acceleration * angle)), and never past the heading within a tick.
+			var braking := max_change * (sqrt(0.25 + 2.0 * angle / (max_change * delta)) - 0.5)
+			wanted_spin = offset.get_axis() * minf(turn_rate, minf(braking, angle / delta))
+
+	_spin = _spin.move_toward(wanted_spin, max_change)
+	var spin_rate := _spin.length()
+	if spin_rate > 0.0:
+		global_basis = Basis((Quaternion(_spin / spin_rate, spin_rate * delta) * current).normalized())
 
 
 ## Stretches the beam from the ship's nose to beam_target, with a little flicker.

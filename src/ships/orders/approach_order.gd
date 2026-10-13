@@ -1,8 +1,10 @@
 class_name ApproachOrder
 extends ShipOrder
 
-## Fly to a target and stay at a given distance from its surface.
+## Fly to a target and stay at a given distance from its surface, nose on the target.
 ## By default the order keeps following the target (even a moving one) until replaced.
+## A target that comes closer (flies at the ship or past it) does not make the ship back off:
+## turning tail to make room and then turning back looked silly. The ship stays and watches it.
 ## With `complete_on_arrival` it finishes as soon as the ship gets there; NPC routines use that.
 ## Ends when the target is gone.
 
@@ -44,7 +46,15 @@ func get_goal(ship: Ship) -> NavGoal:
 	if away.length_squared() < 0.01:
 		away = ship.global_basis.z
 	var stand_off := Autopilot.radius_of(node) + ship.radius + distance
-	return NavGoal.new(center + away.normalized() * stand_off, true, node)
+	var goal: NavGoal
+	if away.length() < stand_off:
+		# Closer than asked (the target came to us): stay put. That is not an arrival, so no
+		# parking either: the ship that moves is the one that steers clear.
+		goal = NavGoal.new(ship.global_position, false, node)
+	else:
+		goal = NavGoal.new(center + away.normalized() * stand_off, true, node)
+	goal.face_point = center
+	return goal
 
 
 func is_complete(ship: Ship) -> bool:

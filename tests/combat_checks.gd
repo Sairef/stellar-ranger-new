@@ -157,6 +157,8 @@ func _auto_engage() -> void:
 	var time: float = await _simulate(60.0, func() -> bool: return _attacking(controller) == "Pirate 1")
 	_check(time > 0.0, "the idle ship attacks the pirate that came into range (%.1f s)" % time)
 	_check(Autopilot.name_of(controller.selected) == "Pirate 1", "and selects it, as nothing was selected")
+	_check(player.get_order_label().ends_with("(%s)" % PlayerController.AUTO_ENGAGE_NOTE),
+			"the order tells why it picked that target (%s)" % player.get_order_label())
 
 	player.give_order(MoveToOrder.new(player.global_position + Vector3(400, 0, 0)))
 	await _simulate(2.0, func() -> bool: return false)
@@ -175,6 +177,8 @@ func _auto_engage() -> void:
 	player.get_weapon().damage = 5.0
 	controller.select(first.resolve())
 	controller.attack_selected()
+	_check(player.get_order_label() == "Attack Pirate 1",
+			"an attack the player ordered has no note (%s)" % player.get_order_label())
 	time = await _simulate(60.0, func() -> bool: return stats.kills > 0)
 	_check(time > 0.0, "the player kills the pirate it was ordered to attack (%.1f s)" % time)
 	time = await _simulate(30.0, func() -> bool: return _attacking(controller) == second_name)
@@ -214,9 +218,7 @@ func _spawn_ship(ship_name: String, position: Vector3, faction: StringName) -> S
 
 ## Name of the ship the player's ship is attacking, or "".
 func _attacking(controller: PlayerController) -> String:
-	if not controller.has_ship() or controller.ship.current_order == null:
-		return ""
-	var target := controller.ship.current_order.get_attack_target()
+	var target := controller.attack_target()
 	return Autopilot.name_of(target) if target != null else ""
 
 

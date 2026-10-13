@@ -14,6 +14,9 @@ var target: Ship:
 	get:
 		return _target.resolve() as Ship
 
+## Why this target, shown in the label (e.g. how auto-engage picked it). Empty: no note.
+var note := ""
+
 var _target: ObjectRef
 var _orbit: OrbitOrder
 
@@ -23,7 +26,8 @@ func _init(p_target: Ship) -> void:
 
 
 func get_label() -> String:
-	return "Attack %s" % Autopilot.name_of(target)
+	var label := "Attack %s" % Autopilot.name_of(target)
+	return label if note.is_empty() else "%s (%s)" % [label, note]
 
 
 func get_target() -> Node3D:

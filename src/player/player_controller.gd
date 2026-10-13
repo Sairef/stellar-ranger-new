@@ -9,6 +9,8 @@ extends Node
 ## Q: approach selected, W: orbit selected, E: attack selected ship, Space: stop,
 ## R: loot the selected wreck or container, T: loot everything within `loot_radius`.
 ## The object under the cursor gets a faint ring (`hovered`), so it is clear what a click selects.
+## The ship the player's ship attacks (`attack_target()`) gets red corner brackets, whether it was
+## picked by the player or by auto-engage.
 ## The ship, the selection and the hovered object are kept as ObjectRefs: once one of them is
 ## gone (destroyed, jumped out), it simply reads as null.
 ##
@@ -59,6 +61,12 @@ const PICK_RADIUS := 16.0
 const PICK_TIE := 2.0
 ## Selection rings are never smaller than this on screen, in pixels.
 const MIN_RING_PIXELS := 28.0
+## Rings span this many radii of the object; attack brackets are a bit wider, around the ring.
+const RING_SCALE := 2.6
+const BRACKETS_SCALE := 3.2
+const MIN_BRACKETS_PIXELS := 36.0
+## Why auto-engage picked its target, shown in the order label.
+const AUTO_ENGAGE_NOTE := "auto: nearest hostile in range"
 ## Longest move order from a double click, in meters.
 const MAX_MOVE_DISTANCE := 5000.0
 
@@ -72,13 +80,16 @@ var _loot_order: LootOrder = null
 var _press_position := Vector2.ZERO
 var _marker: Sprite3D
 var _hover_marker: Sprite3D
+var _attack_marker: Sprite3D
 
 
 func _ready() -> void:
-	_marker = _create_ring(Color(1.0, 0.8, 0.3, 0.9))
+	_marker = _create_marker(_ring_texture(), Color(1.0, 0.8, 0.3, 0.9))
 	add_child(_marker)
-	_hover_marker = _create_ring(Color(1.0, 1.0, 1.0, 0.35))
+	_hover_marker = _create_marker(_ring_texture(), Color(1.0, 1.0, 1.0, 0.35))
 	add_child(_hover_marker)
+	_attack_marker = _create_marker(_brackets_texture(), Color(1.0, 0.25, 0.2, 0.95))
+	add_child(_attack_marker)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -117,8 +128,9 @@ func _process(_delta: float) -> void:
 	_hovered = ObjectRef.to(pick(get_viewport().get_mouse_position()))
 	var current := selected
 	var hover := hovered
-	_place_ring(_marker, current)
-	_place_ring(_hover_marker, hover if hover != current else null)
+	_place_marker(_marker, current)
+	_place_marker(_hover_marker, hover if hover != current else null)
+	_place_marker(_attack_marker, attack_target(), BRACKETS_SCALE, MIN_BRACKETS_PIXELS)
 
 
 func _physics_process(_delta: float) -> void:
@@ -144,7 +156,9 @@ func _auto_engage(own: Ship) -> void:
 	if target == null or _engaged.points_to(target):
 		return
 	_engaged = ObjectRef.to(target)
-	own.give_order(AttackOrder.new(target))
+	var order := AttackOrder.new(target)
+	order.note = AUTO_ENGAGE_NOTE
+	own.give_order(order)
 	if selected == null:
 		select(target)
 
@@ -161,6 +175,13 @@ func select(target: Node3D) -> void:
 func has_ship() -> bool:
 	var own := ship
 	return own != null and own.is_in_space()
+
+
+## The ship the player's ship is ordered to fight (by the player or by auto-engage), or null.
+func attack_target() -> Ship:
+	if not has_ship() or ship.current_order == null:
+		return null
+	return ship.current_order.get_attack_target()
 
 
 func approach_selected() -> void:
@@ -302,20 +323,22 @@ func _on_double_click(screen_position: Vector2) -> void:
 	ship.give_order(MoveToOrder.new(ship.global_position + offset.limit_length(MAX_MOVE_DISTANCE)))
 
 
-## Puts a ring around `target` (or hides it), at least MIN_RING_PIXELS wide on screen.
-func _place_ring(ring: Sprite3D, target: Node3D) -> void:
-	ring.visible = target != null
+## Puts a marker around `target` (or hides it): `span` radii of the object wide, but at least
+## `min_pixels` on screen.
+func _place_marker(marker: Sprite3D, target: Node3D, span := RING_SCALE,
+		min_pixels := MIN_RING_PIXELS) -> void:
+	marker.visible = target != null
 	if target == null:
 		return
-	ring.global_position = target.get_global_transform_interpolated().origin
-	var world_size := Autopilot.radius_of(target) * 2.6
-	var on_screen := _projected_radius(target) * 2.6
-	if on_screen > 0.0 and on_screen < MIN_RING_PIXELS:
-		world_size *= MIN_RING_PIXELS / on_screen
-	ring.pixel_size = world_size / ring.texture.get_width()
+	marker.global_position = target.get_global_transform_interpolated().origin
+	var world_size := Autopilot.radius_of(target) * span
+	var on_screen := _projected_radius(target) * span
+	if on_screen > 0.0 and on_screen < min_pixels:
+		world_size *= min_pixels / on_screen
+	marker.pixel_size = world_size / marker.texture.get_width()
 
 
-func _create_ring(color: Color) -> Sprite3D:
+func _ring_texture() -> Texture2D:
 	var gradient := Gradient.new()
 	gradient.offsets = PackedFloat32Array([0.0, 0.84, 0.88, 0.95, 1.0])
 	gradient.colors = PackedColorArray([
@@ -328,7 +351,22 @@ func _create_ring(color: Color) -> Sprite3D:
 	texture.fill_to = Vector2(1.0, 0.5)
 	texture.width = 128
 	texture.height = 128
+	return texture
 
+
+## Four corners of a square, like a target lock.
+func _brackets_texture() -> Texture2D:
+	const SIZE := 128
+	const ARM := 30
+	const WIDTH := 7
+	var image := Image.create_empty(SIZE, SIZE, false, Image.FORMAT_RGBA8)
+	for corner: Vector2i in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		image.fill_rect(Rect2i(corner.x * (SIZE - ARM), corner.y * (SIZE - WIDTH), ARM, WIDTH), Color.WHITE)
+		image.fill_rect(Rect2i(corner.x * (SIZE - WIDTH), corner.y * (SIZE - ARM), WIDTH, ARM), Color.WHITE)
+	return ImageTexture.create_from_image(image)
+
+
+func _create_marker(texture: Texture2D, color: Color) -> Sprite3D:
 	var marker := Sprite3D.new()
 	marker.texture = texture
 	marker.billboard = BaseMaterial3D.BILLBOARD_ENABLED

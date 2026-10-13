@@ -3,7 +3,8 @@ extends Node
 ## Chaos test for references to world objects (see WorldRegistry and ObjectRef).
 ##
 ## The home system runs with its traffic, miners and patrols, plus a few pirates, an invasion
-## (started at INVASION_TIME) and the scavenger (wrecks aged at SCAVENGER_TIME), while random
+## (started at INVASION_TIME) and the scavenger (from SCAVENGER_TIME on, wrecks are aged every
+## AGING_EVERY seconds until it comes: at any given moment there may be none), while random
 ## world objects vanish at random moments: ships destroyed or removed outright (docked ones and
 ## the player's ship included), drones on the way, field rocks (maybe the one a miner is
 ## working), wrecks and containers, and on a schedule one gate and one station. Meanwhile the
@@ -27,6 +28,7 @@ const COMMAND_EVERY := 2.0
 const GATE_REMOVAL_TIME := 90.0
 const INVASION_TIME := 20.0
 const SCAVENGER_TIME := 100.0
+const AGING_EVERY := 10.0
 const STATION_REMOVAL_TIME := 150.0
 const KINDS: Array[String] = [
 	"ship destroyed", "ship removed", "docked ship removed", "drone", "rock", "wreck", "container",
@@ -54,7 +56,7 @@ func _ready() -> void:
 	_camera = _system.get_node("Camera")
 	var spawner := _system.get_node("TrafficSpawner") as TrafficSpawner
 	var salvage := _system.get_node("SalvageService") as SalvageService
-	var aged := false
+	var next_aging := SCAVENGER_TIME
 	for i in PIRATES:
 		_spawn_pirate(i + 1)
 
@@ -75,8 +77,8 @@ func _ready() -> void:
 			_remove_something()
 		if invasion.invaders_arrived == 0 and not invasion.is_running() and time >= INVASION_TIME:
 			invasion.start()
-		if not aged and time >= SCAVENGER_TIME:
-			aged = true
+		if salvage.scavengers_launched == 0 and time >= next_aging:
+			next_aging += AGING_EVERY
 			salvage.age_wrecks(salvage.abandon_time)
 		if arrivals_at_gate_removal < 0 and time >= GATE_REMOVAL_TIME:
 			arrivals_at_gate_removal = spawner.arrivals
