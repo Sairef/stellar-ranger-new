@@ -7,8 +7,10 @@ extends Node
 ## a "Start invasion" button there.
 ## 1. Warm-up: a gate lights up and pulses for `warmup_time` seconds; the system goes on alert,
 ##    so traders and miners already run for cover and patrols head for the gate.
-## 2. Arrival: the fleet comes out of the membrane one ship at a time, side by side in lanes.
-## 3. `reinforcement_delay` seconds after the start the defense station launches its garrison.
+## 2. Arrival: the fleet comes out of the membrane one ship at a time, side by side in lanes,
+##    small ships first, then medium, then large (see ShipClass).
+## 3. `reinforcement_delay` seconds after the start the defense station launches its garrison
+##    (also of all three classes).
 ## 4. Over when the last invader is gone. Invaders hunt anything within detection range and
 ##    otherwise besiege the defense station; the garrison docks back home after the fight.
 
@@ -34,8 +36,9 @@ const EMERGE_SPEED := 40.0
 @export var event_seed := 0
 
 @export_group("Fleet")
-@export var fighters := 6
-@export var with_leader := true
+@export var small_invaders := 4
+@export var medium_invaders := 2
+@export var large_invaders := 1
 @export var warmup_time := 8.0
 ## Seconds between ships coming out of the gate.
 @export var arrival_interval := 1.0
@@ -43,7 +46,9 @@ const EMERGE_SPEED := 40.0
 
 @export_group("Defense")
 ## Ships the defense station keeps docked and launches when invaded.
-@export var garrison := 8
+@export var small_defenders := 5
+@export var medium_defenders := 2
+@export var large_defenders := 1
 @export var reinforcement_delay := 15.0
 
 var phase := Phase.IDLE
@@ -80,6 +85,16 @@ func _ready() -> void:
 
 func is_running() -> bool:
 	return phase != Phase.IDLE
+
+
+## Ships in the invading fleet.
+func fleet_size() -> int:
+	return small_invaders + medium_invaders + large_invaders
+
+
+## Ships in the full garrison.
+func garrison_size() -> int:
+	return small_defenders + medium_defenders + large_defenders
 
 
 ## Invaders still out in space.
@@ -156,16 +171,22 @@ func _finish() -> void:
 	finished.emit()
 
 
-## The ships to bring in, in order: fighters first, then the leader.
+## The ships to bring in, in order: small ones first, then medium, then large.
 func _fleet() -> Array[Dictionary]:
 	var fleet: Array[Dictionary] = []
-	for i in fighters:
-		fleet.append({"name": "Invader %d" % (i + 1), "radius": 8.0, "shield": 20.0, "armor": 10.0,
-				"speed": 120.0, "acceleration": 40.0, "turn": 1.5})
-	if with_leader:
-		fleet.append({"name": "Invader Leader", "radius": 16.0, "shield": 60.0, "armor": 30.0,
-				"speed": 80.0, "acceleration": 25.0, "turn": 0.9})
+	for size: ShipClass.Size in _classes(small_invaders, medium_invaders, large_invaders):
+		fleet.append({"name": "Invader %d" % (fleet.size() + 1), "class": size})
 	return fleet
+
+
+## Ship classes, `small` small ones first, then `medium` medium and `large` large ones.
+static func _classes(small: int, medium: int, large: int) -> Array[ShipClass.Size]:
+	var result: Array[ShipClass.Size] = []
+	for count_and_size: Array in [[small, ShipClass.Size.SMALL], [medium, ShipClass.Size.MEDIUM],
+			[large, ShipClass.Size.LARGE]]:
+		for i in count_and_size[0]:
+			result.append(count_and_size[1])
+	return result
 
 
 ## Brings one invader out of the gate in a random free lane. Returns false if the lane picked
@@ -179,19 +200,14 @@ func _try_emerge(spec: Dictionary) -> bool:
 	var offset := sqrt(_rng.randf()) * through.opening_radius() * LANE_SPREAD
 	var lane := (through.global_basis.x * cos(angle) + through.global_basis.y * sin(angle)) * offset
 	var spawn: Vector3 = corridor["inner"] + lane
-	if not _is_clear(spawn, spec["radius"]):
+	if not _is_clear(spawn, ShipClass.stats(spec["class"]).radius):
 		return false
 
 	var ship := ShipScene.instantiate() as Ship
 	ship.display_name = spec["name"]
 	ship.faction = Factions.INVADER
 	ship.hull_color = INVADER_COLOR
-	ship.radius = spec["radius"]
-	ship.max_shield = spec["shield"]
-	ship.max_armor = spec["armor"]
-	ship.max_speed = spec["speed"]
-	ship.acceleration = spec["acceleration"]
-	ship.turn_rate = spec["turn"]
+	ship.ship_class = spec["class"]
 	var routine := CombatRoutine.new()
 	routine.detection_range = invader_detection
 	routine.assault_target = get_node_or_null(defense_station)
@@ -214,20 +230,24 @@ func _is_clear(point: Vector3, radius: float) -> bool:
 	return true
 
 
-## Tops the station's garrison up to `garrison` ships (docked, hidden) and schedules them all
-## for launch.
+## Tops the station's garrison up to its full strength in every class (docked, hidden) and
+## schedules them all for launch.
 func _prepare_garrison() -> void:
 	_to_launch.clear()
 	var station := get_node_or_null(defense_station) as SpaceBody
 	if station == null:
 		return
+	var missing := _classes(small_defenders, medium_defenders, large_defenders)
 	_garrison = _garrison.filter(func(ref: ObjectRef) -> bool: return ref.resolve() != null)
-	while _garrison.size() < garrison:
+	for ref in _garrison:
+		missing.erase((ref.resolve() as Ship).ship_class)
+	for size in missing:
 		_serial += 1
 		var ship := ShipScene.instantiate() as Ship
 		ship.name = "Defender%d" % _serial
 		ship.display_name = "Defender %d" % _serial
 		ship.hull_color = DEFENDER_COLOR
+		ship.ship_class = size
 		var routine := CombatRoutine.new()
 		routine.detection_range = invader_detection
 		routine.home = station

@@ -22,15 +22,19 @@ func _ready() -> void:
 	get_tree().quit(1 if _failed > 0 else 0)
 
 
-## Three invaders, a garrison of four: follow the event from start to the all clear and after.
+## Three invaders, a garrison of four (all classes, so big ships dock too): follow the event from
+## start to the all clear and after.
 func _small_invasion_full_cycle() -> void:
 	print("\n== Small invasion: warm-up, reactions, fight, all clear, back to normal")
 	var system := SystemScene.instantiate() as Node3D
 	var invasion := system.get_node("Invasion") as Invasion
 	invasion.event_seed = 5
-	invasion.fighters = 3
-	invasion.with_leader = false
-	invasion.garrison = 4
+	invasion.small_invaders = 2
+	invasion.medium_invaders = 1
+	invasion.large_invaders = 0
+	invasion.small_defenders = 2
+	invasion.medium_defenders = 1
+	invasion.large_defenders = 1
 	invasion.reinforcement_delay = 10.0
 	add_child(system)
 	var security := system.get_node("SystemSecurity") as SystemSecurity
@@ -89,9 +93,9 @@ func _default_invasion() -> void:
 	button.pressed.emit()
 	_check(invasion.is_running() and button.disabled, "the button starts it and is disabled while it runs")
 	await _run(120.0)
-	_check(invasion.invaders_arrived == invasion.fighters + 1,
+	_check(invasion.invaders_arrived == invasion.fleet_size(),
 			"the whole fleet came through (%d)" % invasion.invaders_arrived)
-	_check(invasion.defenders_launched == invasion.garrison,
+	_check(invasion.defenders_launched == invasion.garrison_size(),
 			"the whole garrison was launched (%d)" % invasion.defenders_launched)
 	system.queue_free()
 	await get_tree().physics_frame

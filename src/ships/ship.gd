@@ -28,6 +28,10 @@ signal collided(collider: Object)
 signal damaged(attacker: Ship)
 ## Emitted right before the ship is removed; its wreck is already in the scene.
 signal destroyed(ship: Ship, wreck: Wreck)
+## Emitted on every ship that fired at `victim` (hit or miss) when the victim is destroyed:
+## everyone who took part in the fight shares the reward (placeholder, see
+## docs/combat_rewards.md).
+signal helped_destroy(victim: Ship)
 
 ## Fraction of the target speed kept while the nose points straight away from the goal.
 const MIN_TURN_SPEED_FACTOR := 0.05
@@ -36,6 +40,8 @@ const MIN_TURN_SPEED_FACTOR := 0.05
 const TURN_RAMP_TIME := 0.4
 ## Every ship, docked or not. Autopilot.SHIP_GROUP holds only ships out in space.
 const ALL_SHIPS_GROUP := &"all_ships"
+## Free space between hulls a ship needs right outside the port to undock, in meters.
+const UNDOCK_CLEARANCE := 20.0
 
 @export var display_name := "Ship":
 	set(value):
@@ -54,6 +60,10 @@ const ALL_SHIPS_GROUP := &"all_ships"
 @export var faction := Factions.NEUTRAL
 ## A drone launched by a DroneBay (see above).
 @export var is_drone := false
+## Placeholder class (see ShipClass). Anything but CUSTOM decides the radius, the flight and
+## durability numbers below and the weapon's damage once the ship enters the tree (at runtime
+## only), whatever they were set to.
+@export var ship_class := ShipClass.Size.CUSTOM
 
 @export_group("Durability")
 ## Damage goes to the shield first, then to the armor. No armor left: the ship is destroyed.
@@ -103,6 +113,8 @@ var collision_ticks := 0
 var _face_point: Variant = null
 ## Current turning, in radians per second around the axis it points along (global space).
 var _spin := Vector3.ZERO
+## Ids of the ships that fired at this one (a set).
+var _shot_by := {}
 var _gone := false
 var _docked := false
 var _dock: ObjectRef = null
@@ -132,10 +144,28 @@ func _ready() -> void:
 	_collision_mask = collision_mask if not is_drone else 0
 	collision_layer = _collision_layer
 	collision_mask = _collision_mask
+	_apply_class()
 	cargo.capacity = cargo_capacity
 	shield = max_shield
 	armor = max_armor
 	_rebuild()
+
+
+## Takes the numbers of `ship_class` (nothing for CUSTOM). Not in the editor: scenes keep their
+## own values there.
+func _apply_class() -> void:
+	var stats := ShipClass.stats(ship_class)
+	if stats.is_empty() or Engine.is_editor_hint():
+		return
+	radius = stats.radius
+	max_speed = stats.speed
+	acceleration = stats.acceleration
+	turn_rate = stats.turn_rate
+	max_shield = stats.shield
+	max_armor = stats.armor
+	var weapon := get_weapon()
+	if weapon != null:
+		weapon.damage = stats.damage
 
 
 func give_order(order: ShipOrder) -> void:
@@ -231,6 +261,11 @@ func get_health_text() -> String:
 
 # --- Damage ----------------------------------------------------------------------------------
 
+## Called by a weapon for every shot at this ship, hit or miss (see helped_destroy).
+func note_shot_by(shooter: Ship) -> void:
+	_shot_by[WorldRegistry.id_of(shooter)] = true
+
+
 ## Applies weapon damage: shield first, then armor. Destroys the ship when armor runs out.
 func take_hit(damage: float, attacker: Ship) -> void:
 	if not is_in_space():
@@ -255,6 +290,10 @@ func _destroy() -> void:
 	if not is_drone or not cargo.is_empty():
 		wreck = Wreck.from_ship(self)
 		wreck.enter_space(FadingEffect.root_for(self), global_position)
+	for id: int in _shot_by:
+		var shooter := WorldRegistry.find(id) as Ship
+		if shooter != null:
+			shooter.helped_destroy.emit(self)
 	destroyed.emit(self, wreck)
 	queue_free()
 
@@ -282,20 +321,23 @@ func dock(station: SpaceBody, corridor: int) -> void:
 
 ## Puts the ship straight into a docked state, e.g. for ships that start the game docked.
 func dock_instantly(station: SpaceBody, corridor := 0) -> void:
-	global_position = station.get_corridor(corridor)["inner"]
+	global_position = station.get_corridor(corridor, radius)["inner"]
 	dock(station, corridor)
 
 
 ## Leaves the station through the corridor the ship came in by.
-## Returns false if that corridor is busy right now; try again later.
+## Returns false if that corridor is busy right now, or a ship is right outside the port (the
+## last one out may still be close, or someone passing by); try again later.
 func try_undock() -> bool:
 	var station := docked_at
 	if station == null:
 		return false
+	var points := station.get_corridor(dock_corridor, radius)
+	if not _is_free_at(points["inner"]):
+		return false
 	var order := LeaveOrder.new(station, dock_corridor)
 	if not station.try_reserve_corridor(dock_corridor, self, order):
 		return false
-	var points := station.get_corridor(dock_corridor)
 	_docked = false
 	_dock = null
 	global_position = points["inner"]
@@ -304,6 +346,16 @@ func try_undock() -> bool:
 	_set_in_space(true)
 	give_order(order)
 	undocked.emit(station)
+	return true
+
+
+## No ship out in space is so close to `point` that this ship would touch it there.
+func _is_free_at(point: Vector3) -> bool:
+	for node in get_tree().get_nodes_in_group(Autopilot.SHIP_GROUP):
+		var other := node as Ship
+		if other != self and not other.is_drone \
+				and point.distance_to(other.global_position) < radius + other.radius + UNDOCK_CLEARANCE:
+			return false
 	return true
 
 

@@ -114,7 +114,9 @@ static func traffic_avoidance(ship: Ship, ships: Array, heading: Vector3) -> Vec
 		if other == null or other == ship or other.is_drone:
 			continue
 		var offset := other.global_position - position
-		var safe := ship.radius + other.radius + TRAFFIC_MARGIN
+		# Big ships are slow to turn and to stop: they keep more room, half their combined size.
+		var size := ship.radius + other.radius
+		var safe := size + maxf(TRAFFIC_MARGIN, 0.5 * size)
 		var reach := safe + (ship.max_speed + other.max_speed) * TRAFFIC_HORIZON
 		if offset.length() > reach:
 			continue
@@ -157,7 +159,9 @@ static func free_parking_spot(ship: Ship, goal: NavGoal, ships: Array) -> Vector
 		var other := node as Ship
 		if other == null or other == ship or other.is_drone:
 			continue
-		var safe := ship.radius + other.radius + PARKING_MARGIN
+		# Big neighbours need more room to turn around and leave (see traffic_avoidance()).
+		var size := ship.radius + other.radius
+		var safe := size + maxf(PARKING_MARGIN, size)
 		var offset := point - other.global_position
 		var distance := offset.length()
 		if distance >= safe:

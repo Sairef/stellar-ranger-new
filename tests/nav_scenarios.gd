@@ -40,6 +40,7 @@ func _ready() -> void:
 	await _through_asteroid_field()
 	await _dock_and_undock()
 	await _shared_docking_port()
+	await _big_ships_share_a_port()
 	await _jump_through_gate(Vector3(200, 50, -900), "from the front")
 	await _jump_through_gate(Vector3(300, 0, 900), "from behind")
 	await _gate_arrival()
@@ -277,6 +278,52 @@ func _shared_docking_port() -> void:
 			"through the same port (%d and %d)" % [first.dock_corridor, second.dock_corridor])
 	_check(stats.gap > MIN_GAP, "ships never touched (closest hull gap %.1f m)" % stats.gap)
 	_check(first.collision_ticks + second.collision_ticks == 0, "no physical contacts")
+	await _end()
+
+
+## Three large ships and a small one dock at the same port of a military station (the tightest
+## one), then all of them leave again. They wait in line below the port and go in one by one, big
+## hulls stop with the nose at the port, and nobody undocks into the ship that left before.
+func _big_ships_share_a_port() -> void:
+	_begin("Big ships share a docking port")
+	var station := _spawn_station("Station", Vector3.ZERO, 180.0, Station.Style.MILITARY)
+	var ships: Array[Ship] = []
+	for i in 4:
+		var size := ShipClass.Size.SMALL if i == 3 else ShipClass.Size.LARGE
+		var ship := _spawn_ship("Ship %d" % (i + 1), Vector3(800 + 160 * i, -60, 300 + 60 * i),
+				Vector3.LEFT, size)
+		ship.give_order(DockOrder.new(station))
+		ships.append(ship)
+	var stats := {"gap": INF}
+	var probe := func() -> void:
+		for i in ships.size():
+			for j in range(i + 1, ships.size()):
+				if ships[i].is_in_space() and ships[j].is_in_space():
+					stats.gap = minf(stats.gap, _gap(ships[i], ships[j]))
+	var time: float = await _simulate(400.0,
+			func() -> bool: return ships.all(func(ship: Ship) -> bool: return ship.is_docked()), probe)
+	_check(time > 0.0, "all four docked in %.1f s" % time)
+	_check(ships.all(func(ship: Ship) -> bool: return ship.dock_corridor == ships[0].dock_corridor),
+			"through the same port")
+
+	# Everyone leaves; whoever is out flies off to make room.
+	var leave := func() -> void:
+		probe.call()
+		for i in ships.size():
+			var ship := ships[i]
+			if ship.is_docked():
+				ship.try_undock()
+			elif ship.current_order == null and ship.global_position.length() < 1000.0:
+				ship.give_order(MoveToOrder.new(Vector3(1500, 0, -900 + 600 * i)))
+	time = await _simulate(400.0,
+			func() -> bool: return ships.all(func(ship: Ship) -> bool: return ship.global_position.length() > 1000.0),
+			leave)
+	_check(time > 0.0, "and all of them left again in %.1f s" % time)
+	_check(stats.gap > MIN_GAP, "ships never touched (closest hull gap %.1f m)" % stats.gap)
+	var contacts := 0
+	for ship in ships:
+		contacts += ship.collision_ticks
+	_check(contacts == 0, "no physical contacts, the station included (%d ticks)" % contacts)
 	await _end()
 
 
@@ -553,9 +600,11 @@ func _spawn_gate(gate_name: String, position: Vector3, front_toward: Vector3) ->
 	return gate
 
 
-func _spawn_ship(ship_name: String, position: Vector3, facing: Vector3) -> Ship:
+func _spawn_ship(ship_name: String, position: Vector3, facing: Vector3,
+		size := ShipClass.Size.CUSTOM) -> Ship:
 	var ship := ShipScene.instantiate() as Ship
 	ship.display_name = ship_name
+	ship.ship_class = size
 	ship.enter_space(_world, Transform3D(Basis.looking_at(facing, Vector3.UP), position))
 	_watch_contacts(ship)
 	return ship

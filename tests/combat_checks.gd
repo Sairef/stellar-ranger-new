@@ -24,6 +24,7 @@ func _ready() -> void:
 	await _pirate_meets_armed_trader()
 	await _combat_sandbox_scene()
 	await _auto_engage()
+	await _faction_credits()
 	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
@@ -183,6 +184,48 @@ func _auto_engage() -> void:
 	_check(time > 0.0, "the player kills the pirate it was ordered to attack (%.1f s)" % time)
 	time = await _simulate(30.0, func() -> bool: return _attacking(controller) == second_name)
 	_check(time >= 0.0, "then goes after the next hostile its weapon fires at: %s (%.1f s)" % [second_name, time])
+	await _end()
+
+
+## Faction credits (placeholder): every ship that fired at a destroyed enemy shares the reward,
+## and the player gets +1, whoever finished the enemy off. A kill the player took no part in
+## earns nothing, and neither does shooting down a neutral.
+func _faction_credits() -> void:
+	_begin("Faction credits: everyone who fired at a destroyed enemy")
+	var sandbox := load("res://scenes/sandbox/combat_sandbox.tscn").instantiate() as CombatSandbox
+	_world.add_child(sandbox)
+	var controller := sandbox.controller
+	controller.auto_engage = false
+	var player := controller.ship
+	var pirate := sandbox.get_node("Ships/Pirate1") as Ship
+	pirate.get_weapon().enabled = false
+	pirate.global_position = player.global_position + Vector3(0, 0, -300)
+	var ally := _spawn_ship("Ally", player.global_position + Vector3(200, 0, -100), Factions.NEUTRAL)
+	var shares := {"You": 0, "Ally": 0}
+	player.helped_destroy.connect(func(_victim: Ship) -> void: shares["You"] += 1)
+	ally.helped_destroy.connect(func(_victim: Ship) -> void: shares["Ally"] += 1)
+	var target := ObjectRef.to(pirate)
+	var time: float = await _simulate(60.0, func() -> bool: return target.resolve() == null)
+	_check(time > 0.0, "the player and an ally shoot the pirate down (%.1f s)" % time)
+	_check(shares["You"] == 1 and shares["Ally"] == 1,
+			"both of them took part and share the reward (%s)" % shares)
+	_check(controller.faction_credits == 1, "the player earned 1 faction credit (%d)" % controller.faction_credits)
+
+	var far := _spawn_ship("Far pirate", player.global_position + Vector3(0, 0, 5000), Factions.PIRATE)
+	far.take_hit(100.0, null)
+	_check(controller.faction_credits == 1, "a kill the player took no part in earns nothing (%d)"
+			% controller.faction_credits)
+
+	var bystander := _spawn_ship("Bystander", player.global_position + Vector3(0, 0, 200), Factions.NEUTRAL)
+	bystander.get_weapon().enabled = false
+	ally.get_weapon().enabled = false
+	player.get_weapon().damage = 10.0
+	controller.select(bystander)
+	controller.attack_selected()
+	target = ObjectRef.to(bystander)
+	time = await _simulate(30.0, func() -> bool: return target.resolve() == null)
+	_check(time > 0.0 and shares["You"] == 2 and controller.faction_credits == 1,
+			"shooting down a neutral earns nothing (%d credits)" % controller.faction_credits)
 	await _end()
 
 

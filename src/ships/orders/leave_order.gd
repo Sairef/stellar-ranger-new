@@ -2,7 +2,8 @@ class_name LeaveOrder
 extends ShipOrder
 
 ## Fly out of a structure along a corridor: after undocking, or after arriving through a gate.
-## The structure is not an obstacle on the way out; the corridor is released at its outer end.
+## The structure is not an obstacle on the way out; the corridor is released past its outer end,
+## once the ship is clear of it (the bigger the ship, the farther).
 ## `lane` shifts the whole way out sideways, so several ships can come out of a gate side by
 ## side (an invasion fleet does not queue for the throat). Ends at once if the structure is gone.
 
@@ -42,16 +43,16 @@ func update(ship: Ship, _delta: float) -> void:
 	if body == null:
 		_done = true
 		return
-	if ship.global_position.distance_to(_exit_point(body)) < OUT_REACHED:
+	if ship.global_position.distance_to(_exit_point(body, ship)) < OUT_REACHED:
 		_done = true
 		body.release_corridor(corridor, ship)
 
 
-func get_goal(_ship: Ship) -> NavGoal:
+func get_goal(ship: Ship) -> NavGoal:
 	var body := structure
 	if _done or body == null:
 		return null
-	return NavGoal.new(_exit_point(body), false, body, EnterCorridorOrder.CORRIDOR_SPEED)
+	return NavGoal.new(_exit_point(body, ship), false, body, EnterCorridorOrder.CORRIDOR_SPEED)
 
 
 func is_complete(_ship: Ship) -> bool:
@@ -62,5 +63,7 @@ func is_interruptible() -> bool:
 	return false
 
 
-func _exit_point(body: SpaceBody) -> Vector3:
-	return body.get_corridor(corridor)["outer"] + lane
+func _exit_point(body: SpaceBody, ship: Ship) -> Vector3:
+	var points := body.get_corridor(corridor)
+	var out: Vector3 = (points["outer"] - points["inner"]).normalized()
+	return points["outer"] + out * 2.0 * ship.radius + lane

@@ -15,14 +15,16 @@ currencies or balancing unless asked. Propose the bare-minimum version of a feat
 - `src/ships/` — `Ship` (flight model, docking, jumping, shield/armor, cargo), `Autopilot`
   (obstacle/traffic avoidance), NPC brains (`NpcRoutine` for patrols/orbits, `TraderRoutine`,
   `MinerRoutine`, `CombatRoutine`, `ScavengerRoutine`, `DroneRoutine`), `TrafficSpawner`
-  (traders arriving through gates), `DroneBay` (cargo drones), `player_ship.tscn` (the player's
-  loadout: a ship with a drone bay; every player ship is made from it).
+  (traders arriving through gates), `DroneBay` (cargo drones), `ShipClass` (placeholder
+  small/medium/large ships: size and numbers), `player_ship.tscn` (the player's loadout: a ship
+  with a drone bay; every player ship is made from it).
 - `src/items/` — `Items` (placeholder item ids) and `Cargo` (a hold: pieces, one place each).
 - `src/ships/combat/` — `Weapon` (auto-firing, a child node in `ship.tscn`), `Factions`
   (placeholder hostility), placeholder effects (`CombatEffects`, `FadingEffect`).
 - `src/ships/orders/` — `ShipOrder` and its subclasses. Player and NPCs control ships only
   through `Ship.give_order()` (pillar "Same rules for everyone"). Docking and gate jumps go
-  through structure corridors (`SpaceBody` corridor API, one ship per corridor at a time).
+  through structure corridors (`SpaceBody` corridor API, one ship per corridor at a time; waiting
+  ships line up below the corridor in order of arrival).
 - `src/world/` — `SpaceBody` (base for static objects: a navigation sphere plus generated
   placeholder visuals) and its subclasses `Asteroid`, `Station`, `Gate`, `Wreck` (wrecks and
   dropped cargo containers: things to loot); `AsteroidField`; `SystemSecurity` (alert state NPCs

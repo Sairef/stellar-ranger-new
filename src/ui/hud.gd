@@ -1,9 +1,9 @@
 class_name Hud
 extends CanvasLayer
 
-## Minimal flight HUD: ship status, selected target, command buttons and controls help,
-## a banner with the system's alert state and announcements (see SystemSecurity), and the cargo
-## window (I, or by itself when looting stops because the hold is full).
+## Minimal flight HUD: ship status, faction credits, selected target, command buttons and
+## controls help, a banner with the system's alert state and announcements (see SystemSecurity),
+## and the cargo window (I, or by itself when looting stops because the hold is full).
 ## Built in code for now; it will become a proper scene once the UI grows.
 
 @export var controller: PlayerController
@@ -19,6 +19,8 @@ const HOVER_OFFSET := Vector2(18, 10)
 const BANNER_BOTTOM := 48.0
 const ALERT_COLOR := Color(1.0, 0.45, 0.35)
 const CALM_COLOR := Color(0.6, 1.0, 0.6)
+## Seconds the last faction credits reward stays on screen.
+const REWARD_NOTE_TIME := 4.0
 
 var _status: Label
 var _approach_button: Button
@@ -29,6 +31,8 @@ var _loot_all_button: Button
 var _cargo_window: CargoWindow
 var _hover_label: Label
 var _banner: Label
+var _reward_note := ""
+var _reward_note_time := 0.0
 
 
 func _ready() -> void:
@@ -64,6 +68,9 @@ func _ready() -> void:
 	add_child(_cargo_window)
 	_cargo_window.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	controller.hold_full.connect(func() -> void: _cargo_window.open(CargoWindow.HOLD_FULL_NOTE))
+	controller.faction_credits_earned.connect(func(amount: int, enemy: String) -> void:
+		_reward_note = "+%d for %s" % [amount, enemy]
+		_reward_note_time = REWARD_NOTE_TIME)
 
 	var help := Label.new()
 	help.text = HELP_TEXT
@@ -100,8 +107,9 @@ func _toggle_cargo() -> void:
 	_cargo_window.toggle()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_update_banner()
+	_reward_note_time -= delta
 	var hovered := controller.hovered
 	_hover_label.visible = hovered != null
 	if hovered != null:
@@ -127,9 +135,16 @@ func _process(_delta: float) -> void:
 		lines.append(cargo_line)
 	else:
 		lines.append("Your ship has been destroyed")
+	var credits_line := "Faction credits %d" % controller.faction_credits
+	if _reward_note_time > 0.0:
+		credits_line += "   %s" % _reward_note
+	lines.append(credits_line)
 
 	if target != null:
 		var line := "Target: %s" % Autopilot.name_of(target)
+		var target_ship := target as Ship
+		if target_ship != null and target_ship.ship_class != ShipClass.Size.CUSTOM:
+			line += " (%s)" % ShipClass.name_of(target_ship.ship_class)
 		if has_ship:
 			var gap := ship.global_position.distance_to(target.global_position) \
 					- Autopilot.radius_of(target) - ship.radius

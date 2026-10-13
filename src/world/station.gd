@@ -44,6 +44,10 @@ func get_corridor_count() -> int:
 	return DOCK_ANGLES.size()
 
 
+func _corridor_ends_at_port() -> bool:
+	return true
+
+
 func _corridor_local(index: int) -> Array[Vector3]:
 	var r := radius
 	var direction := _radial(DOCK_ANGLES[index])

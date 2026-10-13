@@ -74,6 +74,7 @@ func _gap_to(target: Ship) -> float:
 
 
 func _fire_at(target: Ship) -> void:
+	target.note_shot_by(_ship)
 	var hit := _rng.randf() < hit_chance
 	CombatEffects.shot(_ship, _ship.get_muzzle_position(), target, hit, _rng)
 	fired.emit(target, hit)

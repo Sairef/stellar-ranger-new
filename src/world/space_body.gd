@@ -34,6 +34,8 @@ var object_id := 0
 
 ## Corridor lock key -> {ship: ObjectRef, order} of the current user.
 var _corridor_locks := {}
+## Corridor index -> ships waiting for it, first one first: [{ship: ObjectRef, order}].
+var _waiting_lines := {}
 
 
 func _enter_tree() -> void:
@@ -86,11 +88,21 @@ func _corridor_local(_index: int) -> Array[Vector3]:
 	return []
 
 
-## Corridor points in global space: {inner, outer, hold}.
-func get_corridor(index: int) -> Dictionary:
+## Override: true if corridors end at a port in the hull (stations: a ship stops there with its
+## nose, bigger ships farther out), false if ships fly right into the inner end (gates).
+func _corridor_ends_at_port() -> bool:
+	return false
+
+
+## Corridor points in global space: {inner, outer, hold}. With `ship_radius`, the inner end is
+## where the center of a ship that big stops (see _corridor_ends_at_port()).
+func get_corridor(index: int, ship_radius := 0.0) -> Dictionary:
 	var points := _corridor_local(index)
+	var inner := points[0]
+	if _corridor_ends_at_port() and ship_radius > 0.0:
+		inner += (points[1] - points[0]).normalized() * ship_radius
 	return {
-		"inner": to_global(points[0]),
+		"inner": to_global(inner),
 		"outer": to_global(points[1]),
 		"hold": to_global(points[2]),
 	}
@@ -126,6 +138,69 @@ func release_corridor(index: int, ship: Ship) -> void:
 	var lock: Dictionary = _corridor_locks.get(key, {})
 	if not lock.is_empty() and (lock["ship"] as ObjectRef).points_to(ship):
 		_corridor_locks.erase(key)
+
+
+## Where `ship` waits for corridor `index`. Waiting ships form a line going down from the holding
+## point, in order of arrival, each far enough from the one ahead to turn around (see Autopilot
+## parking). The first one waits at the top (its own radius below the holding point, clear of
+## ships coming out of the corridor), so nobody stands between it and the corridor when its turn
+## comes. A ship not in line yet gets the spot at the end of the line.
+func waiting_spot(index: int, ship: Ship) -> Vector3:
+	var points := get_corridor(index)
+	var down: Vector3 = (points["hold"] - points["outer"]).normalized()
+	var spot: Vector3 = points["hold"]
+	var previous: Ship = null
+	var line := _waiting_ships(index)
+	if not line.has(ship):
+		line.append(ship)
+	for waiting in line:
+		if previous == null:
+			spot += down * waiting.radius
+		else:
+			var size := previous.radius + waiting.radius
+			spot += down * (size + maxf(Autopilot.PARKING_MARGIN, size))
+		if waiting == ship:
+			break
+		previous = waiting
+	return spot
+
+
+## Puts `ship` (executing `order`) at the end of the line for corridor `index`, unless it is in
+## line already. It stays in line while it executes that order (like a corridor reservation).
+func join_line(index: int, ship: Ship, order: ShipOrder) -> void:
+	if _waiting_ships(index).has(ship):
+		return
+	var line: Array = _waiting_lines.get(index, [])
+	line.append({"ship": ObjectRef.to(ship), "order": order})
+	_waiting_lines[index] = line
+
+
+## True if nobody waits ahead of `ship` for corridor `index`.
+func is_first_in_line(index: int, ship: Ship) -> bool:
+	var line := _waiting_ships(index)
+	return line.is_empty() or line[0] == ship
+
+
+func leave_line(index: int, ship: Ship) -> void:
+	var kept: Array = []
+	for entry: Dictionary in _waiting_lines.get(index, []):
+		if not (entry["ship"] as ObjectRef).points_to(ship):
+			kept.append(entry)
+	_waiting_lines[index] = kept
+
+
+## The ships waiting for corridor `index`, first one first. Ships that are gone or have switched
+## to another order have left the line.
+func _waiting_ships(index: int) -> Array[Ship]:
+	var kept: Array = []
+	var ships: Array[Ship] = []
+	for entry: Dictionary in _waiting_lines.get(index, []):
+		var waiting := (entry["ship"] as ObjectRef).resolve() as Ship
+		if waiting != null and waiting.is_in_space() and waiting.current_order == entry["order"]:
+			kept.append(entry)
+			ships.append(waiting)
+	_waiting_lines[index] = kept
+	return ships
 
 
 ## Corridors sharing a lock key cannot be used at the same time (e.g. both sides of a gate

@@ -99,9 +99,7 @@ rotation = Vector3(0, -0.911, 0)
 position = Vector3(1800, -150, -700)
 display_name = "Patrol Vigil"
 hull_color = Color(0.45, 0.9, 0.45, 1)
-max_speed = 160.0
-acceleration = 60.0
-turn_rate = 2.0
+ship_class = 1
 
 [node name="Routine" type="Node" parent="Ships/PatrolVigil"]
 script = ExtResource("6_routine")
@@ -113,9 +111,7 @@ distance = 100.0
 position = Vector3(1500, -150, -1000)
 display_name = "Patrol Ward"
 hull_color = Color(0.45, 0.9, 0.45, 1)
-max_speed = 160.0
-acceleration = 60.0
-turn_rate = 2.0
+ship_class = 1
 
 [node name="Routine" type="Node" parent="Ships/PatrolWard"]
 script = ExtResource("6_routine")
@@ -126,11 +122,8 @@ distance = 100.0
 [node name="MinerFlint" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Flint"
-radius = 10.0
 hull_color = Color(1, 0.65, 0.25, 1)
-max_speed = 80.0
-acceleration = 25.0
-turn_rate = 1.0
+ship_class = 1
 
 [node name="MinerRoutine" type="Node" parent="Ships/MinerFlint"]
 script = ExtResource("11_miner")
@@ -141,11 +134,8 @@ start_docked_for = 2.0
 [node name="MinerShale" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Shale"
-radius = 10.0
 hull_color = Color(1, 0.65, 0.25, 1)
-max_speed = 80.0
-acceleration = 25.0
-turn_rate = 1.0
+ship_class = 1
 
 [node name="MinerRoutine" type="Node" parent="Ships/MinerShale"]
 script = ExtResource("11_miner")
@@ -156,11 +146,8 @@ start_docked_for = 9.0
 [node name="MinerBasalt" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Basalt"
-radius = 10.0
 hull_color = Color(1, 0.65, 0.25, 1)
-max_speed = 80.0
-acceleration = 25.0
-turn_rate = 1.0
+ship_class = 2
 
 [node name="MinerRoutine" type="Node" parent="Ships/MinerBasalt"]
 script = ExtResource("11_miner")
@@ -171,11 +158,8 @@ start_docked_for = 16.0
 [node name="MinerCobble" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Cobble"
-radius = 10.0
 hull_color = Color(1, 0.65, 0.25, 1)
-max_speed = 80.0
-acceleration = 25.0
-turn_rate = 1.0
+ship_class = 2
 
 [node name="MinerRoutine" type="Node" parent="Ships/MinerCobble"]
 script = ExtResource("11_miner")
