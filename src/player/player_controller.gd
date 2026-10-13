@@ -19,9 +19,9 @@ extends Node
 ## It never overrides an order the player gave, and after Stop the ship does not go back for the
 ## target it was fighting: only a hostile it has not fought yet starts a new attack.
 ##
-## Faction credits (placeholder faction currency): +1 for every destroyed enemy the player's
-## ship fired at, whoever finished it off (see docs/combat_rewards.md). One number for now:
-## no factions, reputation or shop yet.
+## Credits (the one galactic currency, placeholder reward): +1 for every destroyed enemy the
+## player's ship fired at, whoever finished it off (see docs/combat_rewards.md). No real
+## factions, reputation or shop yet.
 ##
 ## The player sees what is inside wrecks only once the ship or one of its drones comes within
 ## Wreck.INSPECT_RANGE. When looting stops because the hold is full, `hold_full` is emitted
@@ -30,8 +30,8 @@ extends Node
 signal selection_changed(target: Node3D)
 ## A loot order stopped because the hold has no room left.
 signal hold_full
-## Faction credits were earned for destroying `enemy`.
-signal faction_credits_earned(amount: int, enemy: String)
+## Credits were earned for destroying `enemy`.
+signal credits_earned(amount: int, enemy: String)
 
 ## The player's ship, or null while there is none (e.g. destroyed).
 @export var ship: Ship:
@@ -52,8 +52,8 @@ signal faction_credits_earned(amount: int, enemy: String)
 ## Distance from the target's surface for the Orbit command, in meters.
 @export var orbit_distance := 100.0
 
-## See "Faction credits" above.
-var faction_credits := 0
+## See "Credits" above.
+var credits := 0
 ## The selected object, or null.
 var selected: Node3D:
 	get:
@@ -251,8 +251,8 @@ func _on_helped_destroy(victim: Ship) -> void:
 	var own := ship
 	if own == null or not own.is_hostile_to(victim):
 		return  # Only enemies count: shooting down a neutral earns nothing.
-	faction_credits += 1
-	faction_credits_earned.emit(1, victim.display_name)
+	credits += 1
+	credits_earned.emit(1, victim.display_name)
 
 
 ## Once the loot order has ended (its drones are back), tells whether the hold got full.

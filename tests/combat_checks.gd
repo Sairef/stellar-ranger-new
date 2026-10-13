@@ -24,7 +24,7 @@ func _ready() -> void:
 	await _pirate_meets_armed_trader()
 	await _combat_sandbox_scene()
 	await _auto_engage()
-	await _faction_credits()
+	await _credits()
 	await _hostile_list()
 	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
 	print("\n%d passed, %d failed" % [_passed, _failed])
@@ -192,11 +192,11 @@ func _auto_engage() -> void:
 	await _end()
 
 
-## Faction credits (placeholder): every ship that fired at a destroyed enemy shares the reward,
+## Credits (placeholder): every ship that fired at a destroyed enemy shares the reward,
 ## and the player gets +1, whoever finished the enemy off. A kill the player took no part in
 ## earns nothing, and neither does shooting down a neutral.
-func _faction_credits() -> void:
-	_begin("Faction credits: everyone who fired at a destroyed enemy")
+func _credits() -> void:
+	_begin("Credits: everyone who fired at a destroyed enemy")
 	var sandbox := load("res://scenes/sandbox/combat_sandbox.tscn").instantiate() as CombatSandbox
 	_world.add_child(sandbox)
 	var controller := sandbox.controller
@@ -214,12 +214,12 @@ func _faction_credits() -> void:
 	_check(time > 0.0, "the player and an ally shoot the pirate down (%.1f s)" % time)
 	_check(shares["You"] == 1 and shares["Ally"] == 1,
 			"both of them took part and share the reward (%s)" % shares)
-	_check(controller.faction_credits == 1, "the player earned 1 faction credit (%d)" % controller.faction_credits)
+	_check(controller.credits == 1, "the player earned 1 credit (%d)" % controller.credits)
 
 	var far := _spawn_ship("Far pirate", player.global_position + Vector3(0, 0, 5000), Factions.PIRATE)
 	far.take_hit(100.0, null)
-	_check(controller.faction_credits == 1, "a kill the player took no part in earns nothing (%d)"
-			% controller.faction_credits)
+	_check(controller.credits == 1, "a kill the player took no part in earns nothing (%d)"
+			% controller.credits)
 
 	var bystander := _spawn_ship("Bystander", player.global_position + Vector3(0, 0, 200), Factions.NEUTRAL)
 	bystander.get_weapon().enabled = false
@@ -229,8 +229,8 @@ func _faction_credits() -> void:
 	controller.attack_selected()
 	target = ObjectRef.to(bystander)
 	time = await _simulate(30.0, func() -> bool: return target.resolve() == null)
-	_check(time > 0.0 and shares["You"] == 2 and controller.faction_credits == 1,
-			"shooting down a neutral earns nothing (%d credits)" % controller.faction_credits)
+	_check(time > 0.0 and shares["You"] == 2 and controller.credits == 1,
+			"shooting down a neutral earns nothing (%d credits)" % controller.credits)
 	await _end()
 
 

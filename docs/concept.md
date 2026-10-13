@@ -12,7 +12,7 @@ A single-player 3D space sandbox where the galaxy lives by its own rules and doe
 |---|---|---|
 | **Kenshi** | Indifferent world, "you are nobody" start, learn-by-doing skills, captivity as a consequence of defeat | Body simulation, squad of on-foot characters |
 | **X4** | Simulated economy, gate network, fleets and stations in the endgame, slow background conflict | Cockpit flight as the main way to play |
-| **EVE Online** | Command-based ship control, skill-gated equipment, real ship loss, escape pod, faction loyalty currency | Multiplayer, time-based skill training |
+| **EVE Online** | Command-based ship control, skill-gated equipment, real ship loss, escape pod | Multiplayer, time-based skill training, per-faction loyalty currencies |
 | **Space Rangers** | NPC pilots living the same life as the player, free choice of career, a war that runs on its own | Text quests, planetary battles, turn-based structure |
 | **Star Citizen** | Crafting where item quality comes from the quality of materials | First-person gameplay, seamless planets |
 
@@ -30,7 +30,8 @@ A single-player 3D space sandbox where the galaxy lives by its own rules and doe
 - **Skills by use:** mining grants mining experience, which raises the mining skill, which unlocks better mining ships and modules. The same applies to combat, trading, piloting, salvaging, etc.
 - **Equipment:** every ship and module has skill requirements; if you cannot use it, you cannot fit it.
 - **Item quality comes from materials** (inspired by Star Citizen crafting). Ore and materials have a quality value, and manufactured items inherit quality from their inputs. Quality tiers (e.g. common / uncommon / rare / epic, shown as white / blue / purple ...) are a readable view of that value. A good item in loot is not magic: it came from a lucky batch. This keeps item quality inside the simulated economy.
-- **Reputation:** tracked per faction. Helping a faction (for example, destroying its enemies near its members) raises reputation and earns that faction's currency, similar to EVE's loyalty points.
+- **Money:** one currency for the whole galaxy, the credit. Everyone pays and gets paid in credits: the player, NPCs, every faction, every station. There are no per-faction currencies.
+- **Reputation:** tracked per faction. Helping a faction (for example, destroying its enemies near its members) raises reputation with it and pays credits.
 - **Endgame:** owning multiple ships, fleets and stations. Control shifts from pilot-level commands to strategic, RTS-like management. This is optional: a player may stay a lone pilot forever.
 
 ## Control model
@@ -65,7 +66,7 @@ A single-player 3D space sandbox where the galaxy lives by its own rules and doe
 >
 > The player, flying a combat ship, joins the fight, picking off small enemy ships on the flank while the military holds the line.
 >
-> When the battle is over, the player launches cargo drones that collect loot from the wrecks, and receives faction currency for destroying the faction's enemies alongside its members.
+> When the battle is over, the player launches cargo drones that collect loot from the wrecks, and receives credits for destroying the faction's enemies alongside its members.
 
 Every system in the first milestone exists to make this scene possible.
 
@@ -116,7 +117,7 @@ Includes:
 - Weapons, damage, destruction, wrecks.
 - An invasion event through the gate, with NPCs reacting to the threat.
 - Loot drones collecting from wrecks.
-- Faction currency for helping in combat.
+- Credits for helping in combat.
 
 Not included yet: multiple systems, full economy, skills, ship fitting UI, station ownership, escape pods.
 
@@ -126,8 +127,8 @@ Draft step order:
 3. ✅ NPC routines (miner, trader, patrol) using the same order system. Ships dock at stations and jump through gates via corridors (one ship per corridor at a time); traders arrive and leave through gates, miners shuttle between their station and the field. A debug panel speeds up time and shows traffic stats.
 4. ✅ Combat: weapons, health, destruction, wrecks. Placeholder numbers until there is real equipment: every ship has one auto-firing weapon (75% hit chance, 1 damage, 2 shots/s, 600 m), 40 shield and 20 armor (no separate hull; doubled after a playtest, fights ended too fast). Weapons fire at the ordered target (Attack order), otherwise at the nearest hostile in range, so everyone defends themselves. Factions are a placeholder: pirates are hostile to all. A destroyed ship leaves a wreck holding "Loot". Abstract beam visuals. Test bed: `scenes/sandbox/combat_sandbox.tscn`. Not yet: line of sight, escape pods, reputation for attacking neutrals.
 5. ✅ Invasion event and NPC threat reactions. Started by hand with a button on the debug panel, never automatically (for now). A gate warms up and the system goes on alert; traders shelter at the nearest station or flee through the safest gate, miners run home, patrols head for the gate; the fleet (6 fighters + a leader) comes out of the membrane; the military station launches its garrison (8). After the last invader the alert is lifted and everyone goes back to work. Balance is tuned so the defense usually wins, but not always: the player's help can decide it.
-6. Loot drones and faction currency.
+6. Loot drones and combat rewards.
    - ✅ Loot. Wrecks hold what was in the ship's hold plus placeholder loot ("Loot 1" x3, "Loot 2" x2); every piece takes one place in a hold, and ore is an item too. Items are dumb placeholders on purpose: this step is about how looting feels, not about what is looted. What is inside a wreck is unknown until the player's ship or one of its drones comes within 1 km. Two orders, as in X4: **Loot** (R) the selected wreck — the ship comes closer and a drone brings everything; **Loot all** (T) within 5 km — the ship tours the wrecks, sending drones to every one in range (600 m). Drones are small unarmed ships: they can be shot down (with their load, in a tiny wreck), but weapons and fighters pick armed targets first. When the hold gets full the cargo window opens (also I): items dropped from it go into a container behind the ship, which Loot all never picks up again (Loot on it still works). Wrecks and containers left alone for 10 minutes are collected by the system scavenger: it undocks from the trade station, loots them with the same order and drones, docks and is gone with the loot — unless someone destroys it, and then its wreck holds what it had collected. Debug button "Age wrecks +10 min".
-   - ✅ Faction currency (placeholder). Every ship that fired at a destroyed enemy shares the reward (how to share it fairly is an open question, see `docs/combat_rewards.md`); the player gets +1 faction credit, shown in the HUD. One number: no factions, reputation or shop yet; shooting down a neutral earns nothing.
+   - ✅ Combat rewards (placeholder). Every ship that fired at a destroyed enemy shares the reward (how to share it fairly is an open question, see `docs/combat_rewards.md`); the player gets +1 credit, shown in the HUD. No real factions, reputation or shop yet; shooting down a neutral earns nothing.
 
 Playtest: ship classes (`ShipClass`, placeholder numbers), to see how fleets of different sizes feel. Medium is the standard ship from before; small ones (fighters) are 30% faster and more agile but 30% weaker (shield, armor, damage), large ones the other way round. Medium ships are twice the size of small ones, large ones four times. The invasion brings 4 small, 2 medium and 1 large ship, the garrison is 5 small, 2 medium and 1 large; patrols are small, miners small and medium, traders medium and large; the player's ship and pirates keep their own numbers. To make room for big ships: ships dock with the nose at the port (big ones stop farther out), ships waiting for a port or a gate line up below it in order of arrival and go in one by one, nobody undocks while a ship is right outside the port, and big ships keep more distance from each other.

@@ -1,7 +1,7 @@
 class_name Hud
 extends CanvasLayer
 
-## Minimal flight HUD: ship status, faction credits, selected target, command buttons and
+## Minimal flight HUD: ship status, credits, selected target, command buttons and
 ## controls help, the list of hostile ships (HostileList), a banner with the system's alert
 ## state and announcements (see SystemSecurity), the cargo window (I, or by itself when looting
 ## stops because the hold is full) and the tactical map (M, TacticalMap).
@@ -20,7 +20,7 @@ const HOVER_OFFSET := Vector2(18, 10)
 const BANNER_BOTTOM := 48.0
 const ALERT_COLOR := Color(1.0, 0.45, 0.35)
 const CALM_COLOR := Color(0.6, 1.0, 0.6)
-## Seconds the last faction credits reward stays on screen.
+## Seconds the last credits reward stays on screen.
 const REWARD_NOTE_TIME := 4.0
 ## Room left for the controls help line at the bottom, in pixels.
 const HELP_LINE_HEIGHT := 32.0
@@ -78,7 +78,7 @@ func _ready() -> void:
 	add_child(_cargo_window)
 	_cargo_window.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	controller.hold_full.connect(func() -> void: _cargo_window.open(CargoWindow.HOLD_FULL_NOTE))
-	controller.faction_credits_earned.connect(func(amount: int, enemy: String) -> void:
+	controller.credits_earned.connect(func(amount: int, enemy: String) -> void:
 		_reward_note = "+%d for %s" % [amount, enemy]
 		_reward_note_time = REWARD_NOTE_TIME)
 
@@ -156,7 +156,7 @@ func _process(delta: float) -> void:
 		lines.append(cargo_line)
 	else:
 		lines.append("Your ship has been destroyed")
-	var credits_line := "Faction credits %d" % controller.faction_credits
+	var credits_line := "Credits %d" % controller.credits
 	if _reward_note_time > 0.0:
 		credits_line += "   %s" % _reward_note
 	lines.append(credits_line)
