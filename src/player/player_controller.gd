@@ -6,7 +6,8 @@ extends Node
 ##
 ## Left click: select an object. Double click: approach the object under the cursor,
 ## or fly to that point on the ship's horizontal plane if there is nothing there.
-## Q: approach selected, W: orbit selected, E: attack selected ship, Space: stop.
+## Q: approach selected, W: orbit selected, E: attack selected ship, Space: stop,
+## R: loot the selected wreck or container, T: loot everything within `loot_radius`.
 ## The object under the cursor gets a faint ring (`hovered`), so it is clear what a click selects.
 ## The ship, the selection and the hovered object are kept as ObjectRefs: once one of them is
 ## gone (destroyed, jumped out), it simply reads as null.
@@ -15,8 +16,14 @@ extends Node
 ## the ship attacks it (comes into range and circles it), so a fight goes on after the first kill.
 ## It never overrides an order the player gave, and after Stop the ship does not go back for the
 ## target it was fighting: only a hostile it has not fought yet starts a new attack.
+##
+## The player sees what is inside wrecks only once the ship or one of its drones comes within
+## Wreck.INSPECT_RANGE. When looting stops because the hold is full, `hold_full` is emitted
+## (the HUD opens the cargo window, so the player can drop what is not worth keeping).
 
 signal selection_changed(target: Node3D)
+## A loot order stopped because the hold has no room left.
+signal hold_full
 
 ## The player's ship, or null while there is none (e.g. destroyed).
 @export var ship: Ship:
@@ -28,6 +35,8 @@ signal selection_changed(target: Node3D)
 @export var camera: Camera3D
 ## See "Auto-engage" above.
 @export var auto_engage := true
+## Radius of Loot all around the ship, in meters.
+@export var loot_radius := 5000.0
 ## Distance from the target's surface for the Approach command, in meters.
 @export var approach_distance := 50.0
 ## Distance from the target's surface for the Orbit command, in meters.
@@ -58,6 +67,8 @@ var _selected := ObjectRef.new()
 var _hovered := ObjectRef.new()
 ## The last ship the player's ship attacked, by order or by auto-engage.
 var _engaged := ObjectRef.new()
+## The last loot order given, until it ends (watched for a full hold).
+var _loot_order: LootOrder = null
 var _press_position := Vector2.ZERO
 var _marker: Sprite3D
 var _hover_marker: Sprite3D
@@ -90,6 +101,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				orbit_selected()
 			KEY_E:
 				attack_selected()
+			KEY_R:
+				loot_selected()
+			KEY_T:
+				loot_all()
 			KEY_SPACE:
 				stop()
 
@@ -107,8 +122,13 @@ func _process(_delta: float) -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if auto_engage and has_ship():
-		_auto_engage(ship)
+	if not has_ship():
+		return
+	var own := ship
+	_watch_loot_order(own)
+	_inspect_wrecks(own)
+	if auto_engage:
+		_auto_engage(own)
 
 
 func _auto_engage(own: Ship) -> void:
@@ -160,6 +180,66 @@ func attack_selected() -> void:
 
 func can_attack_selected() -> bool:
 	return selected is Ship
+
+
+func loot_selected() -> void:
+	if can_loot_selected():
+		_give_loot_order(LootOrder.new([selected]))
+
+
+func loot_all() -> void:
+	if can_loot():
+		_give_loot_order(LootOrder.around(ship.global_position, loot_radius))
+
+
+## The ship is there and has drones.
+func can_loot() -> bool:
+	if not has_ship():
+		return false
+	var bay: DroneBay = ship.get_drone_bay()
+	return bay != null and bay.drones > 0
+
+
+func can_loot_selected() -> bool:
+	return can_loot() and selected is Wreck
+
+
+## Drops `amount` pieces of `item` from the hold into a container behind the ship.
+func jettison(item: StringName, amount: int) -> void:
+	if has_ship():
+		ship.jettison(item, amount)
+
+
+func _give_loot_order(order: LootOrder) -> void:
+	_loot_order = order
+	ship.give_order(order)
+
+
+## Once the loot order has ended (its drones are back), tells whether the hold got full.
+func _watch_loot_order(own: Ship) -> void:
+	if _loot_order == null or own.current_order == _loot_order:
+		return
+	var full := _loot_order.hold_full
+	_loot_order = null
+	if full:
+		hold_full.emit()
+
+
+## Marks wrecks near the ship or its drones as inspected: the player now knows what is inside.
+func _inspect_wrecks(own: Ship) -> void:
+	var eyes: Array[Vector3] = [own.global_position]
+	var bay: DroneBay = own.get_drone_bay()
+	if bay != null:
+		for drone in bay.drones_out():
+			eyes.append(drone.global_position)
+	for node in get_tree().get_nodes_in_group(Wreck.GROUP):
+		var wreck := node as Wreck
+		if wreck.inspected:
+			continue
+		for eye in eyes:
+			if eye.distance_to(wreck.global_position) - wreck.radius <= Wreck.INSPECT_RANGE:
+				wreck.inspected = true
+				break
 
 
 func stop() -> void:

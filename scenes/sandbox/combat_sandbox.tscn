@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://src/ui/hud.gd" id="9_hud"]
 [ext_resource type="Script" path="res://src/ui/debug_panel.gd" id="10_debug_panel"]
 [ext_resource type="Script" path="res://src/debug/player_respawner.gd" id="11_respawner"]
+[ext_resource type="PackedScene" path="res://src/ships/player_ship.tscn" id="12_player_ship"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("2_sky")
@@ -66,10 +67,7 @@ shape_seed = 13
 
 [node name="Ships" type="Node3D" parent="."]
 
-[node name="PlayerShip" parent="Ships" instance=ExtResource("4_ship")]
-display_name = "You"
-hull_color = Color(0.3, 0.75, 1, 1)
-faction = &"player"
+[node name="PlayerShip" parent="Ships" instance=ExtResource("12_player_ship")]
 
 [node name="Pirate1" parent="Ships" instance=ExtResource("4_ship")]
 position = Vector3(0, 0, -1700)

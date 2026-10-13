@@ -87,7 +87,7 @@ func _physics_process(delta: float) -> void:
 		Step.MINE:
 			_step = Step.GO_HOME
 			var rock := _rock.resolve()
-			if rock != null and _ship.cargo < _ship.cargo_capacity:
+			if rock != null and _ship.cargo.room() >= 1.0:
 				_ship.give_order(MineOrder.new(rock, mining_distance))
 		Step.GO_HOME:
 			_release_rock()
@@ -115,7 +115,7 @@ func _shelter() -> void:
 
 
 func _on_docked(_station: SpaceBody) -> void:
-	_ship.cargo = 0.0  # Unloaded while docked.
+	_ship.cargo.clear()  # Unloaded while docked.
 	_step = Step.GO_TO_ROCK
 	undock_in = _rng.randf_range(unload_time.x, unload_time.y)
 

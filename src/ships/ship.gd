@@ -13,6 +13,9 @@ extends CharacterBody3D
 ## turns at a limited rate and slows down in sharp turns. This keeps paths predictable.
 ##
 ## A docked ship is hidden inside its station: no collision, not part of traffic, no orders.
+## Drones (`is_drone`) are small craft launched by a DroneBay: they have no physical collisions
+## and no label, and ships and drones do not steer around each other (drones are nimble and only
+## have to keep clear of rocks and structures).
 ## Visuals are generated from the exported parameters (placeholder art).
 
 signal order_changed(order: ShipOrder)
@@ -45,6 +48,8 @@ const ALL_SHIPS_GROUP := &"all_ships"
 		_queue_rebuild()
 ## See Factions: decides who shoots at whom on sight.
 @export var faction := Factions.NEUTRAL
+## A drone launched by a DroneBay (see above).
+@export var is_drone := false
 
 @export_group("Durability")
 ## Damage goes to the shield first, then to the armor. No armor left: the ship is destroyed.
@@ -60,15 +65,20 @@ const ALL_SHIPS_GROUP := &"all_ships"
 @export var turn_rate := 1.5
 
 @export_group("Cargo")
-@export var cargo_capacity := 100.0
+## Volume of the hold, in cargo units (see Items).
+@export var cargo_capacity := 100.0:
+	set(value):
+		cargo_capacity = value
+		if cargo != null:
+			cargo.capacity = value
 
 var current_order: ShipOrder = null
 ## Current forward speed in m/s.
 var speed := 0.0
 var shield := 0.0
 var armor := 0.0
-## Cargo units in the hold.
-var cargo := 0.0
+## What is in the hold.
+var cargo := Cargo.new()
 ## Point (Vector3) the work beam (e.g. mining laser) is aimed at, or null when it is off.
 var beam_target: Variant = null
 ## Station the ship is docked at (null when not docked, or if the station is gone),
@@ -112,8 +122,11 @@ func _ready() -> void:
 	add_to_group(Autopilot.SHIP_GROUP)
 	add_to_group(ALL_SHIPS_GROUP)
 	motion_mode = MOTION_MODE_FLOATING
-	_collision_layer = collision_layer
-	_collision_mask = collision_mask
+	_collision_layer = collision_layer if not is_drone else 0
+	_collision_mask = collision_mask if not is_drone else 0
+	collision_layer = _collision_layer
+	collision_mask = _collision_mask
+	cargo.capacity = cargo_capacity
 	shield = max_shield
 	armor = max_armor
 	_rebuild()
@@ -166,6 +179,41 @@ func get_weapon() -> Weapon:
 	return null
 
 
+## Has a working weapon, so it is a threat: weapons and fighters pick armed targets first.
+func is_armed() -> bool:
+	var weapon := get_weapon()
+	return weapon != null and weapon.enabled
+
+
+func get_drone_bay() -> DroneBay:
+	for child in get_children():
+		if child is DroneBay:
+			return child
+	return null
+
+
+## Drops `amount` pieces of `item` out of the hold into a cargo container behind the ship
+## (or into the container it dropped just before, if that one is still close). Returns the
+## container, or null if there was nothing to drop.
+func jettison(item: StringName, amount: int) -> Wreck:
+	if not is_in_space():
+		return null
+	var dropped := cargo.remove(item, amount)
+	if dropped <= 0:
+		return null
+	for node in get_tree().get_nodes_in_group(Wreck.GROUP):
+		var nearby := node as Wreck
+		if nearby.is_container and nearby.dropped_by.points_to(self) \
+				and nearby.global_position.distance_to(global_position) < radius + Wreck.MERGE_DISTANCE:
+			nearby.cargo.add(item, dropped)
+			return nearby
+	var container := Wreck.make_container(self)
+	container.cargo.add(item, dropped)
+	var behind := global_basis.z * (radius + container.radius + Wreck.DROP_GAP)
+	container.enter_space(FadingEffect.root_for(self), global_position + behind)
+	return container
+
+
 ## Where shots leave the ship: the tip of the nose.
 func get_muzzle_position() -> Vector3:
 	return global_position + get_forward() * radius
@@ -190,14 +238,17 @@ func take_hit(damage: float, attacker: Ship) -> void:
 		_destroy()
 
 
+## Explodes, leaving a wreck with what was in the hold plus some salvage. An empty drone leaves
+## nothing (the signal then passes a null wreck).
 func _destroy() -> void:
 	_gone = true
 	give_order(null)
 	_set_in_space(false)
 	CombatEffects.explosion(self, global_position, radius)
-	var wreck := Wreck.from_ship(self)
-	FadingEffect.root_for(self).add_child(wreck)
-	wreck.global_position = global_position
+	var wreck: Wreck = null
+	if not is_drone or not cargo.is_empty():
+		wreck = Wreck.from_ship(self)
+		wreck.enter_space(FadingEffect.root_for(self), global_position)
 	destroyed.emit(self, wreck)
 	queue_free()
 
@@ -261,8 +312,9 @@ func jump_out(gate: Gate, corridor: int) -> void:
 	queue_free()
 
 
-## Removes the ship without a trace (no wreck), e.g. along with the station it was docked in.
-func _vanish() -> void:
+## Removes the ship without a trace (no wreck): along with the station it was docked in, a drone
+## landing in its mother ship, a scavenger done with its job.
+func vanish() -> void:
 	_gone = true
 	give_order(null)
 	_set_in_space(false)
@@ -290,7 +342,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if _docked:
 		if docked_at == null:
-			_vanish()  # The station is gone, and the ship was inside it.
+			vanish()  # The station is gone, and the ship was inside it.
 		return
 	if current_order != null:
 		current_order.update(self, delta)
@@ -412,6 +464,11 @@ func _rebuild() -> void:
 	_add_generated(collision)
 
 	# Always visible for now (debugging); later visibility should come from sensors.
+	if is_drone:
+		# Too small and too many for a label; a dot of fixed screen size shows where they fly.
+		_label = null
+		_add_generated(_create_dot())
+		return
 	_label = SpaceLabel.create(display_name, radius)
 	_add_generated(_label)
 	_update_label()
@@ -423,6 +480,28 @@ func _update_label() -> void:
 		return
 	var damaged_now := shield < max_shield or armor < max_armor
 	_label.text = "%s\n%s" % [display_name, get_health_text()] if damaged_now else display_name
+
+
+## A small glowing dot that keeps its size on screen at any distance.
+func _create_dot() -> Sprite3D:
+	var gradient := Gradient.new()
+	gradient.offsets = PackedFloat32Array([0.0, 0.5, 1.0])
+	gradient.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
+	var texture := GradientTexture2D.new()
+	texture.gradient = gradient
+	texture.fill = GradientTexture2D.FILL_RADIAL
+	texture.fill_from = Vector2(0.5, 0.5)
+	texture.fill_to = Vector2(1.0, 0.5)
+	texture.width = 16
+	texture.height = 16
+	var dot := Sprite3D.new()
+	dot.texture = texture
+	dot.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	dot.fixed_size = true
+	dot.pixel_size = 0.0011
+	dot.shaded = false
+	dot.modulate = hull_color.lightened(0.3)
+	return dot
 
 
 func _add_mesh(mesh: Mesh, material: Material) -> MeshInstance3D:

@@ -14,6 +14,8 @@ const ROLES := {
 	"Miners": MinerRoutine.GROUP,
 	"Patrols": NpcRoutine.GROUP,
 	"Fighters": CombatRoutine.GROUP,
+	"Drones": DroneRoutine.GROUP,
+	"Scavengers": ScavengerRoutine.GROUP,
 }
 
 var _stats: Label

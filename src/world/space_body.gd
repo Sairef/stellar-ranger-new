@@ -55,6 +55,14 @@ func get_nav_radius() -> float:
 	return radius
 
 
+## Adds the body to `parent` already at `where` (global). Placing it after adding would put it
+## at the parent's origin for a physics tick, where it may push whatever is there.
+func enter_space(parent: Node, where: Vector3) -> void:
+	var parent_3d := parent as Node3D
+	position = parent_3d.global_transform.affine_inverse() * where if parent_3d != null else where
+	parent.add_child(self)
+
+
 ## Override to build the visuals with add_generated() and add_mesh().
 func _build_visuals() -> void:
 	pass

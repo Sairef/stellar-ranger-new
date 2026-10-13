@@ -362,7 +362,7 @@ func _miner_cycle() -> void:
 	ship.docked.connect(func(_station: SpaceBody) -> void: stats.docks += 1)
 	var rocks := field.get_rocks()
 	var probe := func() -> void:
-		stats.cargo = maxf(stats.cargo, ship.cargo)
+		stats.cargo = maxf(stats.cargo, ship.cargo.total())
 		if ship.visible:
 			for rock in rocks:
 				stats.rock_gap = minf(stats.rock_gap, _gap(ship, rock))

@@ -2,7 +2,8 @@ class_name Hud
 extends CanvasLayer
 
 ## Minimal flight HUD: ship status, selected target, command buttons and controls help,
-## plus a banner with the system's alert state and announcements (see SystemSecurity).
+## a banner with the system's alert state and announcements (see SystemSecurity), and the cargo
+## window (I, or by itself when looting stops because the hold is full).
 ## Built in code for now; it will become a proper scene once the UI grows.
 
 @export var controller: PlayerController
@@ -23,6 +24,9 @@ var _status: Label
 var _approach_button: Button
 var _orbit_button: Button
 var _attack_button: Button
+var _loot_button: Button
+var _loot_all_button: Button
+var _cargo_window: CargoWindow
 var _hover_label: Label
 var _banner: Label
 
@@ -47,8 +51,19 @@ func _ready() -> void:
 	_orbit_button = _add_button(buttons, "Orbit [W]", controller.orbit_selected)
 	_attack_button = _add_button(buttons, "Attack [E]", controller.attack_selected)
 	_add_button(buttons, "Stop [Space]", controller.stop)
+	var more := HBoxContainer.new()
+	column.add_child(more)
+	_loot_button = _add_button(more, "Loot [R]", controller.loot_selected)
+	_loot_all_button = _add_button(more, "Loot all [T]", controller.loot_all)
+	_add_button(more, "Cargo [I]", _toggle_cargo)
 	if debug_draw != null:
-		_add_button(buttons, "Debug [F3]", debug_draw.toggle)
+		_add_button(more, "Debug [F3]", debug_draw.toggle)
+
+	_cargo_window = CargoWindow.new()
+	_cargo_window.controller = controller
+	add_child(_cargo_window)
+	_cargo_window.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 12)
+	controller.hold_full.connect(func() -> void: _cargo_window.open(CargoWindow.HOLD_FULL_NOTE))
 
 	var help := Label.new()
 	help.text = HELP_TEXT
@@ -75,6 +90,16 @@ func _ready() -> void:
 	_banner.offset_bottom = -BANNER_BOTTOM
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	var key := event as InputEventKey
+	if key != null and key.pressed and not key.echo and key.keycode == KEY_I:
+		_toggle_cargo()
+
+
+func _toggle_cargo() -> void:
+	_cargo_window.toggle()
+
+
 func _process(_delta: float) -> void:
 	_update_banner()
 	var hovered := controller.hovered
@@ -92,6 +117,14 @@ func _process(_delta: float) -> void:
 		lines.append("Shield %.0f / %.0f   Armor %.0f / %.0f" % [
 				ship.shield, ship.max_shield, ship.armor, ship.max_armor])
 		lines.append("Order: %s" % ship.get_order_label())
+		var cargo_line := "Cargo %d / %.0f" % [ship.cargo.total(), ship.cargo.capacity]
+		var bay: DroneBay = ship.get_drone_bay()
+		if bay != null:
+			cargo_line += "   Drones %d" % bay.drones
+			var out := bay.drones_out().size()
+			if out > 0:
+				cargo_line += " (%d out)" % out
+		lines.append(cargo_line)
 	else:
 		lines.append("Your ship has been destroyed")
 
@@ -105,17 +138,23 @@ func _process(_delta: float) -> void:
 		if target is Ship:
 			var other := target as Ship
 			var activity := "%s   %s" % [other.get_health_text(), other.get_order_label()]
-			if other.cargo > 0.0:
-				activity += "   cargo %.0f / %.0f" % [other.cargo, other.cargo_capacity]
+			if not other.cargo.is_empty():
+				activity += "   cargo %d" % other.cargo.total()
 			lines.append("   " + activity)
 		elif target is Wreck:
-			lines.append("   Contains: %s" % ", ".join((target as Wreck).contents))
+			var wreck := target as Wreck
+			if wreck.inspected:
+				lines.append("   Contains: %s" % wreck.cargo.describe())
+			else:
+				lines.append("   Contents unknown: come within %.0f m" % Wreck.INSPECT_RANGE)
 	else:
 		lines.append("Target: none (click an object)")
 	_status.text = "\n".join(lines)
 	_approach_button.disabled = not has_ship or target == null
 	_orbit_button.disabled = not has_ship or target == null
 	_attack_button.disabled = not has_ship or not controller.can_attack_selected()
+	_loot_button.disabled = not controller.can_loot_selected()
+	_loot_all_button.disabled = not controller.can_loot()
 
 
 func _update_banner() -> void:

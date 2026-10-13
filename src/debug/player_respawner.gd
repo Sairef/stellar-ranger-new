@@ -4,8 +4,7 @@ extends Node
 ## Debug helper: gives the player a new ship after the old one is gone, through a
 ## "Respawn player" button on the debug panel. Escape pods will replace this one day.
 
-const ShipScene := preload("res://src/ships/ship.tscn")
-const PLAYER_COLOR := Color(0.3, 0.75, 1.0)
+const PlayerShipScene := preload("res://src/ships/player_ship.tscn")
 ## Free space needed around the respawn point, in meters.
 const CLEARANCE := 60.0
 
@@ -25,10 +24,7 @@ func _ready() -> void:
 func respawn() -> Ship:
 	if controller.has_ship():
 		return controller.ship
-	var ship := ShipScene.instantiate() as Ship
-	ship.display_name = "You"
-	ship.faction = Factions.PLAYER
-	ship.hull_color = PLAYER_COLOR
+	var ship := PlayerShipScene.instantiate() as Ship
 	ship.enter_space(ships_root, Transform3D(Basis.IDENTITY, _free_point(spawn_point)))
 	controller.ship = ship
 	camera.target = ship

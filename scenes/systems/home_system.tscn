@@ -16,6 +16,8 @@
 [ext_resource type="Script" path="res://src/world/system_security.gd" id="14_security"]
 [ext_resource type="Script" path="res://src/world/invasion.gd" id="15_invasion"]
 [ext_resource type="Script" path="res://src/debug/player_respawner.gd" id="16_respawner"]
+[ext_resource type="PackedScene" path="res://src/ships/player_ship.tscn" id="17_player_ship"]
+[ext_resource type="Script" path="res://src/world/salvage_service.gd" id="18_salvage"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("1_sky")
@@ -89,12 +91,9 @@ field_seed = 7
 
 [node name="Ships" type="Node3D" parent="."]
 
-[node name="PlayerShip" parent="Ships" instance=ExtResource("5_ship")]
+[node name="PlayerShip" parent="Ships" instance=ExtResource("17_player_ship")]
 position = Vector3(-1200, 80, 930)
 rotation = Vector3(0, -0.911, 0)
-display_name = "You"
-hull_color = Color(0.3, 0.75, 1, 1)
-faction = &"player"
 
 [node name="PatrolVigil" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(1800, -150, -700)
@@ -232,3 +231,9 @@ camera = NodePath("../Camera")
 debug_panel = NodePath("../DebugPanel")
 ships_root = NodePath("../Ships")
 spawn_point = Vector3(-1200, 80, 930)
+
+[node name="SalvageService" type="Node" parent="." node_paths=PackedStringArray("debug_panel")]
+script = ExtResource("18_salvage")
+station = NodePath("../Stations/HalcyonExchange")
+ships_root = NodePath("../Ships")
+debug_panel = NodePath("../DebugPanel")

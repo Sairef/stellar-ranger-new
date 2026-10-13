@@ -14,6 +14,7 @@ extends RefCounted
 ##    Rocks whose bubbles overlap are treated as one big sphere (see _merge_cluster()).
 ## 2. Traffic: ships predict the closest approach to every nearby ship, sidestep if it is
 ##    too close and slow down the more urgent the sidestep is (see traffic_avoidance()).
+##    Drones take no part in it: ships ignore them, and they ignore ships.
 ## 3. Parking: an arrival point taken by another ship slides sideways (see free_parking_spot()).
 ##
 ## Known limits: dense asteroid fields need real path planning (merged bubbles get huge),
@@ -105,10 +106,12 @@ static func plan_direction(from: Vector3, to: Vector3, ship_radius: float, veloc
 ## Sidestep vector that keeps the ship clear of other ships, or zero if nobody is in the way.
 static func traffic_avoidance(ship: Ship, ships: Array, heading: Vector3) -> Vector3:
 	var result := Vector3.ZERO
+	if ship.is_drone:
+		return result
 	var position := ship.global_position
 	for node in ships:
 		var other := node as Ship
-		if other == null or other == ship:
+		if other == null or other == ship or other.is_drone:
 			continue
 		var offset := other.global_position - position
 		var safe := ship.radius + other.radius + TRAFFIC_MARGIN
@@ -145,12 +148,14 @@ static func traffic_avoidance(ship: Ship, ships: Array, heading: Vector3) -> Vec
 ## goal's target (keeping the same distance to it) until there is room.
 static func free_parking_spot(ship: Ship, goal: NavGoal, ships: Array) -> Vector3:
 	var point := goal.point
+	if ship.is_drone:
+		return point
 	var axis := Vector3.ZERO
 	if is_instance_valid(goal.ignore):
 		axis = (point - goal.ignore.global_position).normalized()
 	for node in ships:
 		var other := node as Ship
-		if other == null or other == ship:
+		if other == null or other == ship or other.is_drone:
 			continue
 		var safe := ship.radius + other.radius + PARKING_MARGIN
 		var offset := point - other.global_position

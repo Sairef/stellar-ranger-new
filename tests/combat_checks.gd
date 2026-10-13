@@ -36,6 +36,7 @@ func _damage_layers() -> void:
 	var ship := _spawn_ship("Target", Vector3.ZERO, Factions.NEUTRAL)
 	var attacker := _spawn_ship("Attacker", Vector3(0, 0, -2000), Factions.PIRATE)
 	attacker.get_weapon().enabled = false
+	ship.cargo.add(Items.ORE, 10)
 	var stats := {"wreck": null}
 	ship.destroyed.connect(func(_ship: Ship, wreck: Wreck) -> void: stats.wreck = wreck)
 
@@ -51,8 +52,8 @@ func _damage_layers() -> void:
 	await get_tree().process_frame
 	_check(not is_instance_valid(ship), "the ship is gone")
 	var wreck := stats.wreck as Wreck
-	_check(is_instance_valid(wreck) and wreck.contents.size() == 1 and wreck.contents[0] == "Loot",
-			"it leaves a wreck with loot")
+	_check(is_instance_valid(wreck) and wreck.cargo.count(Items.ORE) == 10 and wreck.cargo.count(Items.LOOT_1) > 0,
+			"it leaves a wreck with its cargo and loot (%s)" % wreck.cargo.describe())
 	_check(wreck.display_name == "Wreck of Target", "the wreck is named after the ship (%s)" % wreck.display_name)
 	await _end()
 

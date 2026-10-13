@@ -2,7 +2,8 @@ class_name CombatRoutine
 extends Node
 
 ## NPC fighter brain, placed as a child of a Ship: hunts the nearest hostile ship within
-## detection range and attacks it until one of them is gone.
+## detection range and attacks it until one of them is gone. Armed hostiles come first:
+## unarmed ones (drones) are hunted only when no threat is within detection range.
 ## With nobody to fight it docks at `home` if it has one (station garrisons), otherwise circles
 ## `assault_target` if it has one (invaders besieging a station), otherwise waits.
 ## Gives orders through the same API the player uses.
@@ -68,13 +69,17 @@ func _physics_process(delta: float) -> void:
 
 func _nearest_hostile() -> Ship:
 	var best: Ship = null
-	var best_distance := detection_range
+	var best_score := INF
 	for node in get_tree().get_nodes_in_group(Autopilot.SHIP_GROUP):
 		var other := node as Ship
 		if other == _ship or not _ship.is_hostile_to(other):
 			continue
 		var distance := _ship.global_position.distance_to(other.global_position)
-		if distance < best_distance:
-			best_distance = distance
+		if distance > detection_range:
+			continue
+		# Any armed ship in range beats every unarmed one.
+		var score := distance + (0.0 if other.is_armed() else detection_range * 2.0)
+		if score < best_score:
+			best_score = score
 			best = other
 	return best
