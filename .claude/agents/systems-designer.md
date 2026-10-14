@@ -2,7 +2,7 @@
 name: systems-designer
 description: Systems designer. Turns a design idea into exact rules, numbers, edge cases and acceptance criteria, measures fights and loops in headless scenes, and later checks the implementation against the spec. Use proactively after the game designer and before coding any mechanic, and whenever prices, rewards, damage or timings change.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: fable
+model: opus
 effort: high
 color: blue
 ---

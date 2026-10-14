@@ -2,7 +2,7 @@
 name: producer
 description: Producer, guardian of scope and order. Use proactively when choosing the next step, planning a milestone, or when a feature grows; says what to do next, its bare-minimum version, what to cut or defer, and what playtests raised that is still unaddressed. Read-only.
 tools: Read, Grep, Glob, Bash
-model: fable
+model: opus
 effort: high
 color: yellow
 ---

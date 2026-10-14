@@ -1,7 +1,7 @@
 ---
 name: modeler
 description: 3D modeler. Builds low-poly models (ships, stations, gates, asteroids, wrecks) as Blender Python scripts, renders previews to judge them, and exports .glb files Godot imports. Use proactively when the brief is about how anything in space looks, or when a new kind of world object needs a model.
-model: fable
+model: opus
 effort: high
 color: cyan
 ---

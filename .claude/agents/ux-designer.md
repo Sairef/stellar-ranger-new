@@ -2,7 +2,7 @@
 name: ux-designer
 description: UX/UI designer of the production interface (not a fixer of the debug UI). Designs what the player sees, decides and presses in each situation, the information hierarchy and feedback, with wireframes in docs/ui/. Use proactively when a feature adds or changes anything the player sees, and when planning interface work.
 tools: Read, Grep, Glob, Write, Edit, WebSearch, WebFetch, mcp__godot-ai__editor_state, mcp__godot-ai__project_run, mcp__godot-ai__project_manage, mcp__godot-ai__game_manage, mcp__godot-ai__editor_screenshot
-model: fable
+model: opus
 effort: high
 color: pink
 ---

@@ -2,7 +2,7 @@
 name: playtester
 description: Blind playtester. Plays the running game through godot-ai like a newcomer, knowing only what the screen shows, and reports how it feels (decisions, wants, tension, boredom, confusion). Use proactively after a mechanic is implemented and its tests pass, but only when the game window is free (the user is not playing).
 tools: mcp__godot-ai__editor_state, mcp__godot-ai__project_run, mcp__godot-ai__project_manage, mcp__godot-ai__game_manage, mcp__godot-ai__editor_screenshot, mcp__godot-ai__logs_read
-model: fable
+model: opus
 effort: high
 omitClaudeMd: true
 color: green

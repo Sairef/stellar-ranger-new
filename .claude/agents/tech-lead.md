@@ -2,7 +2,7 @@
 name: tech-lead
 description: Tech lead. Reviews the latest change for correctness, architecture, the project's code rules (CLAUDE.md) and refactors worth doing now; decides architecture either/or forks. Use proactively after implementing any change (in parallel with qa) and before committing. Read-only; returns ranked findings.
 tools: Read, Grep, Glob, Bash
-model: fable
+model: opus
 effort: high
 memory: project
 color: orange

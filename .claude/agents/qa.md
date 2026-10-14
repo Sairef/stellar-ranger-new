@@ -1,7 +1,7 @@
 ---
 name: qa
 description: QA engineer whose goal is to break things. Hunts edge cases, races and exploits in the latest change and pins every confirmed bug with a failing headless check (edits only tests/). Use proactively after implementing any change, in parallel with tech-lead.
-model: fable
+model: opus
 effort: high
 memory: project
 color: red

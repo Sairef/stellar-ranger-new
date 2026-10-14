@@ -2,7 +2,7 @@
 name: game-designer
 description: Game designer, keeper of the vision and the player's experience. Use proactively before any new mechanic or milestone step (why build it, which pillar, smallest testable version), on design either/or forks, and to judge a playtest report against the milestone's goal. Read-only; returns a recommendation.
 tools: Read, Grep, Glob, WebSearch, WebFetch
-model: fable
+model: opus
 effort: high
 color: purple
 ---
