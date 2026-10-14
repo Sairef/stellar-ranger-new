@@ -7,7 +7,8 @@ extends CanvasLayer
 
 @export var spawner: TrafficSpawner
 
-const TIME_SCALES: Array[float] = [1.0, 2.0, 4.0, 8.0]
+## Below x1 for playtests driven by an agent: its reactions are far slower than a human's.
+const TIME_SCALES: Array[float] = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
 ## Ship roles shown in the statistics: label -> group.
 const ROLES := {
 	"Traders": TraderRoutine.GROUP,
@@ -44,7 +45,7 @@ func _ready() -> void:
 	speed_row.add_child(speed_label)
 	var group := ButtonGroup.new()
 	for time_scale in TIME_SCALES:
-		var button := _make_button("x%d" % int(time_scale))
+		var button := _make_button("x%s" % String.num(time_scale))
 		button.toggle_mode = true
 		button.button_group = group
 		button.button_pressed = is_equal_approx(Engine.time_scale, time_scale)

@@ -1,3 +1,9 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Throwaway measurement scenes of the systems-designer agent
+/tests/scratch/
+
+# Model previews rendered by the modeler agent (rebuilt from art/ scripts)
+/art/previews/

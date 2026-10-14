@@ -110,3 +110,34 @@ The MCP input emulator cannot drag the mouse, so the camera also listens to the 
 degrees, `"Kp Add"` / `"Kp Subtract"` zooms one step, `"Up"` etc. rotate while held.
 Mouse wheel and clicks work through `input_mouse`. `get_node_info` with `path: "Camera"`
 shows the camera state; `editor_screenshot` with `source: "game"` captures the frame.
+The Debug panel's Time buttons (x0.25 to x8) make up for the latency of a driving agent: slow
+down for fights, speed up for travel.
+
+## Team (subagents)
+
+`.claude/agents/` holds a game studio team. The main session writes the code; the agents design,
+review, test and play. Call them on your own initiative and freely (cost is not a concern):
+- `producer`: what to do next, its bare-minimum version, what to cut, debt from playtests.
+- `game-designer`: why build it, pillars, the player's experience; design forks; judges playtest
+  reports against the milestone's goal.
+- `systems-designer`: the spec (rules, numbers, edge cases, acceptance criteria), measured in
+  throwaway scenes under `tests/scratch/` (gitignored); checks the implementation against it.
+- `ux-designer`: the production interface (the current UI is a debug prototype); writes to
+  `docs/ui/`.
+- `qa`: breaks the change and pins each bug with a failing check (edits only `tests/`).
+- `tech-lead`: correctness, architecture and the rules of this file; architecture forks.
+- `playtester`: plays blind through godot-ai and reports how it feels.
+- `modeler`: low-poly models as Blender Python scripts (`art/`), built headless into
+  `assets/models/*.glb`; the main session integrates them. The official Blender MCP (`Blender`
+  server) reaches the Blender the user keeps open: the modeler shows its models there.
+
+The usual flow for a mechanic: producer and game-designer, then systems-designer (and ux-designer
+if the player sees it), then the main session implements, then qa and tech-lead in parallel,
+fixes, then the playtester, and the game-designer reads its report against the goal; then the
+user plays. Small fixes skip the design steps. The playtester and the ux-designer need the game
+window: first check that the user is not playing (ask if unsure), and never run both at once.
+Agents cannot ask the user: they return open questions, and the main session asks. The main
+session weighs their advice (it is not an order), tells the user in short what was taken and what
+was not, and saves playtest reports verbatim in `docs/playtests/`. QA and the tech lead keep their
+own memory in `.claude/agent-memory/` (committed). Agents get CLAUDE.md but not the main
+session's auto memory: knowledge they need goes into their agent file or here.
