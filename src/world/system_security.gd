@@ -2,11 +2,15 @@ class_name SystemSecurity
 extends Node
 
 ## The star system's view of its own safety: which hostile ships (pirates, invaders) are out in
-## space here, and whether the system is on alert. NPC brains ask it how to react (traders
-## shelter or flee, miners go home, patrols hunt). One per system scene; find it with of().
+## space here, and whether the system is on alert. NPC brains ask it how to react. One per system
+## scene; find it with of().
 ##
-## The alert starts as soon as a hostile ship shows up, or earlier when someone raises it by hand
-## (an activating gate), and is lifted `all_clear_delay` seconds after the last hostile is gone.
+## Two levels. The alert is for an invasion: it starts as soon as an invader (ALARM_FACTIONS)
+## shows up, or earlier when someone raises it by hand (an activating gate), and is lifted
+## `all_clear_delay` seconds after the last invader is gone. On alert the whole system reacts:
+## traders shelter or flee, no traffic comes in, miners go home, patrols hunt. Ordinary threats
+## (pirates) do not stop the system: only who is close reacts (miners run from a pirate nearby,
+## see threat_within()), and patrols hunt any hostile.
 ## Also carries short announcements for the HUD.
 
 signal alert_started
@@ -15,6 +19,8 @@ signal all_clear
 const GROUP := &"system_security"
 ## Hostility is judged from the point of view of the system's ordinary inhabitants.
 const LOCAL_FACTION := Factions.NEUTRAL
+## Hostiles that put the whole system on alert.
+const ALARM_FACTIONS: Array[StringName] = [Factions.INVADER]
 ## How long an announcement stays on screen, in seconds.
 const ANNOUNCEMENT_TIME := 6.0
 
@@ -24,6 +30,10 @@ const ANNOUNCEMENT_TIME := 6.0
 
 var alert := false
 var announcement := ""
+## The latest announcement warns of danger (the HUD sounds the alarm for it).
+var announcement_is_warning := false
+## Announcements made so far, to tell a new one from the last one.
+var announcements := 0
 
 ## Where danger is expected before any hostile is seen (e.g. an activating gate).
 var _danger: ObjectRef = ObjectRef.new()
@@ -45,7 +55,7 @@ func _physics_process(delta: float) -> void:
 	if _scan_in > 0.0:
 		return
 	_scan_in = scan_interval
-	if not threats().is_empty():
+	if threats().any(func(ship: Ship) -> bool: return ship.faction in ALARM_FACTIONS):
 		_quiet_for = minf(_quiet_for, 0.0)
 		_set_alert(true)
 	elif alert:
@@ -75,11 +85,16 @@ func threats() -> Array[Ship]:
 
 
 func nearest_threat(point: Vector3) -> Ship:
+	return threat_within(point, INF)
+
+
+## The nearest hostile ship within `radius` of `point`, or null.
+func threat_within(point: Vector3, radius: float) -> Ship:
 	var best: Ship = null
-	var best_distance := INF
+	var best_distance := radius
 	for ship in threats():
 		var distance := point.distance_to(ship.global_position)
-		if distance < best_distance:
+		if distance <= best_distance:
 			best_distance = distance
 			best = ship
 	return best
@@ -92,8 +107,11 @@ func danger_near(point: Vector3) -> Node3D:
 	return threat if threat != null else _danger.resolve()
 
 
-func announce(text: String) -> void:
+## Shows `text` in the HUD for a while; a `warning` sounds the alarm.
+func announce(text: String, warning := false) -> void:
 	announcement = text
+	announcement_is_warning = warning
+	announcements += 1
 	_announced_at = Time.get_ticks_msec() / 1000.0
 
 

@@ -66,9 +66,9 @@ static func steer(ship: Ship, goal: NavGoal) -> Vector3:
 	if distance < ARRIVE_EPSILON:
 		return Vector3.ZERO
 
-	var speed := minf(ship.max_speed, goal.speed)
+	var speed := minf(ship.top_speed(), goal.speed)
 	if goal.arrive:
-		speed = minf(speed, sqrt(2.0 * ship.acceleration * BRAKING_FACTOR * distance))
+		speed = minf(speed, sqrt(2.0 * ship.top_acceleration() * BRAKING_FACTOR * distance))
 
 	var direction := plan_direction(from, goal.point, ship.radius, ship.velocity, ship.global_basis.x,
 			obstacles, goal.ignore)
@@ -117,7 +117,7 @@ static func traffic_avoidance(ship: Ship, ships: Array, heading: Vector3) -> Vec
 		# Big ships are slow to turn and to stop: they keep more room, half their combined size.
 		var size := ship.radius + other.radius
 		var safe := size + maxf(TRAFFIC_MARGIN, 0.5 * size)
-		var reach := safe + (ship.max_speed + other.max_speed) * TRAFFIC_HORIZON
+		var reach := safe + (ship.top_speed() + other.top_speed()) * TRAFFIC_HORIZON
 		if offset.length() > reach:
 			continue
 
@@ -210,6 +210,34 @@ static func circle_clearance(center: Vector3, normal: Vector3, circle_radius: fl
 		var gap := sqrt(height * height + pow(in_plane - circle_radius, 2.0)) - bubble
 		result = minf(result, gap)
 	return result
+
+
+## Where a ship at `from`, flying straight at `speed`, meets a target at `target` moving straight
+## at `target_velocity`: the target's position at that moment. Looks at most `max_time` seconds
+## ahead (targets in a fight do not fly straight for long). A target the ship cannot catch (as
+## fast and flying away, or faster): where it will be by the time the ship reaches the point
+## where it is now, again at most `max_time` ahead.
+static func intercept_point(from: Vector3, speed: float, target: Vector3, target_velocity: Vector3,
+		max_time: float) -> Vector3:
+	var offset := target - from
+	# |offset + target_velocity * t| = speed * t, a quadratic in t.
+	var a := target_velocity.length_squared() - speed * speed
+	var b := 2.0 * offset.dot(target_velocity)
+	var c := offset.length_squared()
+	var time := INF
+	if absf(a) < 0.001:
+		if b < 0.0:
+			time = -c / b
+	else:
+		var discriminant := b * b - 4.0 * a * c
+		if discriminant >= 0.0:
+			var root := sqrt(discriminant)
+			for t: float in [(-b - root) / (2.0 * a), (-b + root) / (2.0 * a)]:
+				if t > 0.0:
+					time = minf(time, t)
+	if time == INF:
+		time = offset.length() / maxf(speed, 0.001)
+	return target + target_velocity * minf(time, max_time)
 
 
 ## Collision/avoidance radius of any space object (0 if it has none).

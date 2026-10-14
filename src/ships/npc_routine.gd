@@ -6,9 +6,10 @@ extends Node
 ##
 ## PATROL: fly between waypoints forever, pausing at each one.
 ## ORBIT: circle the first waypoint forever.
-## With `defend` set, the ship drops its routine while the system is on alert (SystemSecurity):
-## it attacks the nearest hostile, or, before any shows up, waits near where the danger is
-## expected (e.g. an activating gate). After the all clear it goes back to its routine.
+## With `defend` set, the ship drops its routine while there are hostile ships in the system
+## (pirates too) or the system is on alert (SystemSecurity): it attacks the nearest hostile, or,
+## before any shows up, waits near where the danger is expected (e.g. an activating gate). Once
+## the danger is over it goes back to its routine.
 
 enum Mode { PATROL, ORBIT }
 
@@ -62,7 +63,7 @@ func _physics_process(delta: float) -> void:
 ## Handles the alert. Returns true while the ship is busy defending.
 func _defend() -> bool:
 	var security := SystemSecurity.of(self)
-	if security == null or not security.alert:
+	if security == null or not (security.alert or not security.threats().is_empty()):
 		if _defending:
 			_defending = false
 			_ship.give_order(null)  # Back to the routine.

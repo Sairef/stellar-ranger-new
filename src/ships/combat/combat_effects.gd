@@ -1,7 +1,7 @@
 class_name CombatEffects
 extends RefCounted
 
-## Placeholder combat visuals: shot beams, impact flashes and explosions.
+## Placeholder combat effects: shot beams, impact flashes and explosions, with their sounds (Sfx).
 ## Abstract on purpose: a beam that hits or misses is enough to read a fight.
 
 ## Colors may go above 1.0: they are HDR, so they glow.
@@ -16,6 +16,10 @@ const BEAM_TIME := 0.2
 const BEAM_RADIUS := 2.5
 const IMPACT_TIME := 0.25
 const EXPLOSION_TIME := 0.9
+## Shots are many: quieter than hits and explosions, in dB.
+const SHOT_VOLUME := -8.0
+## Radius of a ship whose explosion sounds at its normal pitch; bigger ones sound deeper.
+const EXPLOSION_PITCH_RADIUS := 8.0
 
 static var _beam_mesh: CylinderMesh
 static var _ball_mesh: SphereMesh
@@ -36,10 +40,12 @@ static func shot(context: Node, from: Vector3, target: Ship, hit: bool,
 		side = side.normalized().rotated(direction, rng.randf() * TAU)
 		to = center + side * target.radius * rng.randf_range(1.5, 3.0) + direction * target.radius * 6.0
 	beam(context, from, to, HIT_COLOR if hit else MISS_COLOR)
+	Sfx.play_at(context, &"shot", from, SHOT_VOLUME, rng.randf_range(0.9, 1.1))
 	if hit:
-		var color := SHIELD_COLOR if target.shield > 0.0 else ARMOR_COLOR
-		FadingEffect.spawn(context, _ball(), color,
+		var on_shield := target.shield > 0.0
+		FadingEffect.spawn(context, _ball(), SHIELD_COLOR if on_shield else ARMOR_COLOR,
 				Transform3D(Basis.from_scale(Vector3.ONE * target.radius * 0.5), to), IMPACT_TIME, 2.0)
+		Sfx.play_at(context, &"hit_shield" if on_shield else &"hit_armor", to)
 
 
 static func beam(context: Node, from: Vector3, to: Vector3, color: Color) -> void:
@@ -57,6 +63,8 @@ static func explosion(context: Node, where: Vector3, size: float) -> void:
 			Transform3D(Basis.from_scale(Vector3.ONE * size), where), EXPLOSION_TIME, 4.0)
 	FadingEffect.spawn(context, _ball(), Color(4, 4, 4, 1),
 			Transform3D(Basis.from_scale(Vector3.ONE * size * 0.6), where), EXPLOSION_TIME * 0.4, 2.0)
+	Sfx.play_at(context, &"explosion", where, 0.0,
+			clampf(sqrt(EXPLOSION_PITCH_RADIUS / maxf(size, 1.0)), 0.5, 1.6))
 
 
 static func _beam() -> CylinderMesh:

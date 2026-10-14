@@ -6,32 +6,50 @@ Single-player 3D space sandbox in Godot 4.7 (GDScript, Jolt physics). The game c
 design pillars and milestone plan are in `docs/concept.md` — read it before design work.
 
 Current stage: playtests of how mechanics feel. Build the mechanic properly, but stub the content
-with the dumbest placeholders ("Loot 1", size 1, price 1): no item variety, drop tables, multiple
-currencies or balancing unless asked. Propose the bare-minimum version of a feature first.
+with the dumbest placeholders ("Loot 1", size 1): no item variety, drop tables, multiple
+currencies or balancing unless asked. Prices and rewards are the exception: give them a size that
+makes the loop work (what things cost against what the player earns is part of the mechanic being
+playtested, see "Third milestone" in `docs/concept.md`). Propose the bare-minimum version of a
+feature first.
 
 ## Layout
 
 - `src/core/` — `WorldRegistry` (the `World` autoload: ids of world objects) and `ObjectRef`.
-- `src/ships/` — `Ship` (flight model, docking, jumping, shield/armor, cargo), `Autopilot`
+- `src/ships/` — `Ship` (flight model, docking, jumping, shield/armor, cargo, escape pod),
+  `Autopilot`
   (obstacle/traffic avoidance), NPC brains (`NpcRoutine` for patrols/orbits, `TraderRoutine`,
   `MinerRoutine`, `CombatRoutine`, `ScavengerRoutine`, `DroneRoutine`), `TrafficSpawner`
-  (traders arriving through gates), `DroneBay` (cargo drones), `ShipClass` (placeholder
-  small/medium/large ships: size and numbers), `player_ship.tscn` (the player's loadout: a ship
-  with a drone bay; every player ship is made from it).
+  (traders arriving through gates), `DroneBay` (cargo drones), `MiningLaser` (only ships with
+  one can mine), `ShipClass` (placeholder small/medium/large ships: size, numbers, hold; an
+  upgrade moves a ship one class up; also where each class's weapon hits best), `miner_ship.tscn`
+  (a laser, no weapon: NPC miners), the player's loadouts: `player_ship.tscn` (combat ship
+  with a weapon and a drone bay; also the starter ship a pod gets at a station) and
+  `player_miner.tscn` (the mining ship with a bigger hold).
+- `src/ships/modules/` — `ShipModule` (a part the pilot switches on, keys 1, 2, ...; runs on the
+  ship's energy) and its subclasses `Afterburner` and `ShieldBooster`.
 - `src/items/` — `Items` (placeholder item ids) and `Cargo` (a hold: pieces, one place each).
-- `src/ships/combat/` — `Weapon` (auto-firing, a child node in `ship.tscn`), `Factions`
+- `src/audio/` — `Sfx`: placeholder sound effects synthesized in code (no audio files).
+- `src/ships/combat/` — `Weapon` (auto-firing, a child node in `ship.tscn`; its hit chance
+  depends on distance and target size, `hit_chance_against()`, which the HUD shows too), `Factions`
   (placeholder hostility), placeholder effects (`CombatEffects`, `FadingEffect`).
-- `src/ships/orders/` — `ShipOrder` and its subclasses. Player and NPCs control ships only
-  through `Ship.give_order()` (pillar "Same rules for everyone"). Docking and gate jumps go
+- `src/ships/orders/` — `ShipOrder` and its subclasses. Player and NPCs steer ships only
+  through `Ship.give_order()` (pillar "Same rules for everyone"); momentary acts next to the order
+  (`Ship.activate_module()`, `Ship.jettison()`) are Ship methods both sides call. Docking and gate jumps go
   through structure corridors (`SpaceBody` corridor API, one ship per corridor at a time; waiting
   ships line up below the corridor in order of arrival).
 - `src/world/` — `SpaceBody` (base for static objects: a navigation sphere plus generated
   placeholder visuals) and its subclasses `Asteroid`, `Station`, `Gate`, `Wreck` (wrecks and
-  dropped cargo containers: things to loot); `AsteroidField`; `SystemSecurity` (alert state NPCs
-  react to), `Invasion` (the event, started by a debug button), `SalvageService` (the scavenger);
-  labels, sky and gate shaders. `src/player/` — input and camera. `src/ui/` — HUD, the cargo
-  window, the hostile list, the tactical map (M: top-down view with icons; its camera replaces
-  the controller's while open) and the debug panel (time scale, traffic stats; home of manual
+  dropped cargo containers: things to loot); `AsteroidField`; `SystemSecurity` (hostiles around
+  and the invasion alert NPCs react to), `Invasion` (the event, started by a debug button),
+  `PirateRaids` (pirates raiding the asteroid field on a timer; `create_pirate()` is the one place
+  pirates are made), `SalvageService` (the scavenger), `StationServices` (what a docked ship can
+  buy and sell: repairs, modules, upgrades, cargo), `Bounties` (credits for destroyed hostiles);
+  labels, sky and gate shaders. `src/player/` — input and camera; `PlayerController`
+  also keeps the player's credits and fleet (the ship flown, other owned ships, boarding).
+  `src/ui/` — HUD, the cargo window, the station window (while docked), the hostile list, the
+  tactical map (M: top-down view with icons; its camera replaces the controller's while open),
+  the minimap (bottom right, follows the ship; both maps draw and pick with `MapPainter`) and
+  the debug panel (time scale, traffic stats; home of manual
   debug triggers).
   `src/debug/` — debug overlays, test-bed scene scripts, `PlayerRespawner`.
 - `scenes/systems/home_system.tscn` — main scene: the first star system.
@@ -49,15 +67,22 @@ D:/Godot/Godot_v4.7.2-stable_win64_console.exe --headless --path . --fixed-fps 6
 
 Exit code 0 means all scenarios passed. Run `--headless --path . --import` first if new
 `class_name` scripts were added while the editor was closed. Camera controls have their own
-checks in `res://tests/camera_checks.tscn`, mouse picking (3D view and map) in `res://tests/picking_checks.tscn`,
-combat in `res://tests/combat_checks.tscn`, loot (cargo, drones, loot orders, the scavenger) in
-`res://tests/loot_checks.tscn`, the invasion in `res://tests/invasion_checks.tscn`,
-the game as it really boots in `res://tests/startup_checks.tscn` (its main scene contains the
-home system: references set by a scene resolve at boot), and `res://tests/chaos_checks.tscn` removes random
-world objects at random moments while the home system runs (same command). Every suite fails
-on any error logged during the run (`tests/support/error_log.gd`). Spawn ships with
+checks in `res://tests/camera_checks.tscn`, mouse picking (3D view, map and minimap) in `res://tests/picking_checks.tscn`,
+combat (hit chance by distance, bounties, modules, sounds too) in `res://tests/combat_checks.tscn`, loot (cargo, drones,
+loot orders, the scavenger) in `res://tests/loot_checks.tscn`, stations and the player's loop
+(docking, repairs, modules, upgrades, selling, boarding, mining, the escape pod, shield recharge)
+in `res://tests/station_checks.tscn`, the invasion in `res://tests/invasion_checks.tscn`, pirate
+raids in `res://tests/raid_checks.tscn`, the game as it really boots in
+`res://tests/startup_checks.tscn` (its main scene contains the home system: references set by a
+scene resolve at boot), and `res://tests/chaos_checks.tscn` removes random world objects at random
+moments while the home system runs (same command). Suites extend `tests/support/check_suite.gd`
+(checks, a scenario world, simulation helpers); every suite fails on any error logged during the
+run (`tests/support/error_log.gd`). Suites that run the home system for something other than
+raids switch `PirateRaids.auto` off, so a raid does not turn up in the middle. Spawn ships with
 `Ship.enter_space()` and wrecks/bodies with `SpaceBody.enter_space()`, not add_child + move:
 for a physics tick the body sits at the parent's origin and may push whatever is there.
+Simulated mouse events need viewport coordinates: `get_viewport().push_input(event, true)`
+(headless, the window is scaled, and screen coordinates land far off).
 
 ## World objects and references
 

@@ -18,6 +18,9 @@
 [ext_resource type="Script" path="res://src/debug/player_respawner.gd" id="16_respawner"]
 [ext_resource type="PackedScene" path="res://src/ships/player_ship.tscn" id="17_player_ship"]
 [ext_resource type="Script" path="res://src/world/salvage_service.gd" id="18_salvage"]
+[ext_resource type="PackedScene" path="res://src/ships/player_miner.tscn" id="20_player_miner"]
+[ext_resource type="Script" path="res://src/world/pirate_raids.gd" id="21_raids"]
+[ext_resource type="PackedScene" path="res://src/ships/miner_ship.tscn" id="22_miner_ship"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("1_sky")
@@ -95,6 +98,10 @@ field_seed = 7
 position = Vector3(-1200, 80, 930)
 rotation = Vector3(0, -0.911, 0)
 
+[node name="PlayerMiner" parent="Ships" instance=ExtResource("20_player_miner")]
+position = Vector3(-1200, 80, 600)
+start_docked_at = NodePath("../../Stations/HalcyonExchange")
+
 [node name="PatrolVigil" parent="Ships" instance=ExtResource("5_ship")]
 position = Vector3(1800, -150, -700)
 display_name = "Patrol Vigil"
@@ -119,7 +126,7 @@ defend = true
 waypoints = Array[NodePath]([NodePath("../../../Gates/EastGate"), NodePath("../../../Stations/BastionOutpost")])
 distance = 100.0
 
-[node name="MinerFlint" parent="Ships" instance=ExtResource("5_ship")]
+[node name="MinerFlint" parent="Ships" instance=ExtResource("22_miner_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Flint"
 hull_color = Color(1, 0.65, 0.25, 1)
@@ -131,7 +138,7 @@ home = NodePath("../../../Stations/HalcyonExchange")
 field = NodePath("../../../AsteroidField")
 start_docked_for = 2.0
 
-[node name="MinerShale" parent="Ships" instance=ExtResource("5_ship")]
+[node name="MinerShale" parent="Ships" instance=ExtResource("22_miner_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Shale"
 hull_color = Color(1, 0.65, 0.25, 1)
@@ -143,7 +150,7 @@ home = NodePath("../../../Stations/HalcyonExchange")
 field = NodePath("../../../AsteroidField")
 start_docked_for = 9.0
 
-[node name="MinerBasalt" parent="Ships" instance=ExtResource("5_ship")]
+[node name="MinerBasalt" parent="Ships" instance=ExtResource("22_miner_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Basalt"
 hull_color = Color(1, 0.65, 0.25, 1)
@@ -155,7 +162,7 @@ home = NodePath("../../../Stations/HalcyonExchange")
 field = NodePath("../../../AsteroidField")
 start_docked_for = 16.0
 
-[node name="MinerCobble" parent="Ships" instance=ExtResource("5_ship")]
+[node name="MinerCobble" parent="Ships" instance=ExtResource("22_miner_ship")]
 position = Vector3(-1200, 80, 600)
 display_name = "Miner Cobble"
 hull_color = Color(1, 0.65, 0.25, 1)
@@ -175,10 +182,12 @@ stations = Array[NodePath]([NodePath("../Stations/HalcyonExchange"), NodePath(".
 gates = Array[NodePath]([NodePath("../Gates/NorthGate"), NodePath("../Gates/EastGate"), NodePath("../Gates/WestGate")])
 traffic_root = NodePath("../Ships/Traffic")
 
-[node name="PlayerController" type="Node" parent="." node_paths=PackedStringArray("ship", "camera")]
+[node name="PlayerController" type="Node" parent="." node_paths=PackedStringArray("ship", "fleet", "camera", "follow_camera")]
 script = ExtResource("7_controller")
 ship = NodePath("../Ships/PlayerShip")
+fleet = [NodePath("../Ships/PlayerMiner")]
 camera = NodePath("../Camera")
+follow_camera = NodePath("../Camera")
 
 [node name="Camera" type="Camera3D" parent="." node_paths=PackedStringArray("target")]
 near = 0.5
@@ -219,5 +228,12 @@ spawn_point = Vector3(-1200, 80, 930)
 [node name="SalvageService" type="Node" parent="." node_paths=PackedStringArray("debug_panel")]
 script = ExtResource("18_salvage")
 station = NodePath("../Stations/HalcyonExchange")
+ships_root = NodePath("../Ships")
+debug_panel = NodePath("../DebugPanel")
+
+[node name="PirateRaids" type="Node" parent="." node_paths=PackedStringArray("debug_panel")]
+script = ExtResource("21_raids")
+gates = Array[NodePath]([NodePath("../Gates/NorthGate"), NodePath("../Gates/EastGate"), NodePath("../Gates/WestGate")])
+field = NodePath("../AsteroidField")
 ships_root = NodePath("../Ships")
 debug_panel = NodePath("../DebugPanel")

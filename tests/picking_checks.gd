@@ -1,22 +1,16 @@
-extends Node
+extends "res://tests/support/check_suite.gd"
 
-## Headless checks for picking objects with the mouse (PlayerController.pick()), in the 3D view
-## and on the tactical map.
+## Headless checks for picking objects with the mouse (PlayerController.pick()), in the 3D view,
+## on the tactical map and on the minimap.
 ## Run from the project folder:
 ##   godot --headless --path . --fixed-fps 60 res://tests/picking_checks.tscn
 
-const ErrorLog := preload("res://tests/support/error_log.gd")
 const ShipScene := preload("res://src/ships/ship.tscn")
 const GateScene := preload("res://src/world/gate.tscn")
 const StationScene := preload("res://src/world/station.tscn")
 
-var _errors := ErrorLog.new()
-var _passed := 0
-var _failed := 0
-
 
 func _ready() -> void:
-	OS.add_logger(_errors)
 	# The camera sits at the origin looking down -Z.
 	var camera := Camera3D.new()
 	camera.far = 60000.0
@@ -59,10 +53,9 @@ func _ready() -> void:
 	_check(is_same(controller.selected, null), "a destroyed selection is cleared (%s)" % controller.selected)
 
 	await _tactical_map(controller, camera)
+	await _minimap(controller)
 
-	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
-	print("\n%d passed, %d failed" % [_passed, _failed])
-	get_tree().quit(1 if _failed > 0 else 0)
+	_finish()
 
 
 ## M opens the map, and its camera becomes the one clicks are picked with. A tight group of
@@ -103,6 +96,71 @@ func _tactical_map(controller: PlayerController, view_camera: Camera3D) -> void:
 	map.queue_free()
 
 
+## The minimap follows the ship; real mouse clicks on it select, double clicks fly, the wheel
+## zooms, and none of it reaches the 3D view behind it. It hides while the tactical map is open.
+func _minimap(controller: PlayerController) -> void:
+	print("
+== Minimap")
+	var player := controller.ship
+	var map := TacticalMap.new()
+	map.controller = controller
+	add_child(map)
+	var minimap := Minimap.new()
+	minimap.controller = controller
+	minimap.map = map
+	add_child(minimap)
+	minimap.position = Vector2(100, 100)
+	minimap.size = Vector2(300, 300)
+	var near := _add(ShipScene, player.global_position + Vector3(400, 0, 300)) as Ship
+	controller.select(null)
+	await get_tree().process_frame
+	_check(minimap.visible and minimap.to_local_point(player.global_position).distance_to(minimap.size * 0.5) < 1.0,
+			"the minimap is centered on the player's ship")
+
+	var near_px := minimap.position + minimap.to_local_point(near.global_position)
+	_click(near_px)
+	await get_tree().process_frame
+	_check(controller.selected == near, "a click on an icon selects that ship (%s)" % controller.selected)
+
+	var empty_px := minimap.position + Vector2(40, 260)
+	var expected := Vector3(player.global_position.x - 110.0 / 300.0 * Minimap.START_SPAN, player.global_position.y,
+			player.global_position.z + 110.0 / 300.0 * Minimap.START_SPAN)
+	_click(empty_px, true)
+	await get_tree().process_frame
+	var order := player.current_order as MoveToOrder
+	_check(order != null and order.point.distance_to(expected) < 1.0,
+			"a double click on empty space flies there, at the ship's height (%s)" % (order.point if order != null else null))
+	_check(controller.selected == near, "the 3D view behind got none of the clicks (selection kept)")
+
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel.pressed = true
+	wheel.position = empty_px
+	get_viewport().push_input(wheel, true)
+	_check(minimap.span < Minimap.START_SPAN, "the wheel zooms in (%.0f m across)" % minimap.span)
+
+	map.open()
+	await get_tree().process_frame
+	_check(not minimap.visible, "hidden while the tactical map is open")
+	map.close()
+	minimap.queue_free()
+	map.queue_free()
+
+
+## A left click (press and release) at `position` in the viewport, or a double click.
+## The position is in the viewport's own pixels (`in_local_coords`): headless, the window is
+## scaled, and screen coordinates would land far off.
+func _click(position: Vector2, double := false) -> void:
+	for pressed in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		event.double_click = double and pressed
+		event.position = position
+		event.global_position = position
+		get_viewport().push_input(event, true)
+
+
 func _tap(keycode: Key) -> void:
 	for pressed in [true, false]:
 		var event := InputEventKey.new()
@@ -116,12 +174,3 @@ func _add(scene: PackedScene, position: Vector3) -> Node3D:
 	add_child(node)
 	node.global_position = position
 	return node
-
-
-func _check(condition: bool, message: String) -> void:
-	if condition:
-		_passed += 1
-		print("  PASS  " + message)
-	else:
-		_failed += 1
-		print("  FAIL  " + message)

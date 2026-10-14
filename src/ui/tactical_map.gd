@@ -2,9 +2,8 @@ class_name TacticalMap
 extends CanvasLayer
 
 ## The tactical map (M): the system seen from straight above, with icons instead of models, so a
-## crowded fight can be zoomed apart and every ship in it clicked. Ships are triangles pointing
-## where they fly: red for hostiles, cyan for the player, gray for everyone else, bigger for
-## bigger classes. Stations and gates are outlined and named, rocks and wrecks are dots.
+## crowded fight can be zoomed apart and every ship in it clicked. The icons are drawn by
+## MapPainter, like on the minimap.
 ## The game keeps running, and everything else works as in the 3D view: click to select,
 ## Q/W/E/R/T for orders, double click to fly to a point; the selection ring and the attack
 ## brackets show on the map too, the 3D name labels do not (SpaceLabel.LAYER).
@@ -23,19 +22,6 @@ const ZOOM_STEP := 1.2
 const KEY_PAN_SPEED := 0.6
 
 const BACKGROUND_COLOR := Color(0.02, 0.025, 0.045)
-const GRID_COLOR := Color(0.4, 0.5, 0.7, 0.12)
-const HOSTILE_COLOR := Color(1.0, 0.3, 0.25)
-const PLAYER_COLOR := Color(0.3, 0.85, 1.0)
-const OTHER_COLOR := Color(0.72, 0.75, 0.8)
-const STRUCTURE_COLOR := Color(0.85, 0.85, 0.9, 0.9)
-const ROCK_COLOR := Color(0.5, 0.48, 0.45)
-const WRECK_COLOR := Color(0.75, 0.6, 0.3)
-## Half the length of a ship icon, in pixels, by ship class.
-const ICON_SIZE := {
-	ShipClass.Size.CUSTOM: 6.0, ShipClass.Size.SMALL: 5.0, ShipClass.Size.MEDIUM: 7.5,
-	ShipClass.Size.LARGE: 11.0,
-}
-const FONT_SIZE := 14
 
 var controller: PlayerController
 var is_open := false
@@ -44,6 +30,7 @@ var _camera: Camera3D
 ## The 3D view's camera, current again once the map closes.
 var _view_camera: Camera3D
 var _overlay: Control
+var _painter := MapPainter.new()
 ## Point of the ecliptic in the middle of the map.
 var _center := Vector3.ZERO
 var _centered := false
@@ -205,77 +192,7 @@ func _ground_at(screen_position: Vector2) -> Vector3:
 
 
 func _draw_map() -> void:
-	var font := ThemeDB.fallback_font
-	var tree := get_tree()
-	_draw_grid(font)
-	for node in tree.get_nodes_in_group(Autopilot.OBSTACLE_GROUP):
-		var body := node as SpaceBody
-		if body != null:
-			_draw_body(body, font)
-	var own := controller.ship if controller.has_ship() else null
-	for node in tree.get_nodes_in_group(Autopilot.SHIP_GROUP):
-		var ship := node as Ship
-		var color := OTHER_COLOR
-		if ship == own:
-			color = PLAYER_COLOR
-		elif Factions.are_hostile(Factions.PLAYER, ship.faction):
-			color = HOSTILE_COLOR
-		_draw_ship(ship, color)
-
-
-## Faint lines on the ecliptic every 10, 100, 1000... meters: the power of ten just below half
-## the map height, so there are 2 to 20 lines across. The step is written at the top.
-func _draw_grid(font: Font) -> void:
-	var screen := _screen_size()
-	var step := pow(10.0, floorf(log(_camera.size * 0.5) / log(10.0)))
-	var top_left := _ground_at(Vector2.ZERO)
-	var bottom_right := _ground_at(screen)
-	var x := ceilf(top_left.x / step) * step
-	while x <= bottom_right.x:
-		var at := _camera.unproject_position(Vector3(x, 0.0, _center.z))
-		_overlay.draw_line(Vector2(at.x, 0.0), Vector2(at.x, screen.y), GRID_COLOR)
-		x += step
-	var z := ceilf(top_left.z / step) * step
-	while z <= bottom_right.z:
-		var at := _camera.unproject_position(Vector3(_center.x, 0.0, z))
-		_overlay.draw_line(Vector2(0.0, at.y), Vector2(screen.x, at.y), GRID_COLOR)
-		z += step
-	var label := "Grid %s" % ("%.0f km" % (step / 1000.0) if step >= 1000.0 else "%.0f m" % step)
-	_overlay.draw_string(font, Vector2(screen.x * 0.5 - 30.0, 24.0), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, STRUCTURE_COLOR)
-
-
-func _draw_body(body: SpaceBody, font: Font) -> void:
-	var at := _camera.unproject_position(body.global_position)
-	var radius := maxf(2.0, body.radius / _camera.size * _screen_size().y)
-	if body is Station or body is Gate:
-		radius = maxf(radius, 6.0)
-		if body is Station:
-			_overlay.draw_rect(Rect2(at - Vector2.ONE * radius, Vector2.ONE * radius * 2.0), STRUCTURE_COLOR, false, 2.0)
-		else:
-			_overlay.draw_arc(at, radius, 0.0, TAU, 32, STRUCTURE_COLOR, 2.0)
-		var name_at := at + Vector2(-radius, radius + FONT_SIZE + 2.0)
-		_overlay.draw_string(font, name_at, body.display_name, HORIZONTAL_ALIGNMENT_LEFT, -1, FONT_SIZE, STRUCTURE_COLOR)
-	elif body is Wreck:
-		var d := 3.0
-		_overlay.draw_line(at - Vector2(d, d), at + Vector2(d, d), WRECK_COLOR, 1.5)
-		_overlay.draw_line(at - Vector2(d, -d), at + Vector2(d, -d), WRECK_COLOR, 1.5)
-	else:
-		_overlay.draw_circle(at, radius, ROCK_COLOR)
-
-
-func _draw_ship(ship: Ship, color: Color) -> void:
-	var at := _camera.unproject_position(ship.get_global_transform_interpolated().origin)
-	if ship.is_drone:
-		_overlay.draw_circle(at, 1.5, color)
-		return
-	var size: float = ICON_SIZE[ship.ship_class]
-	var forward := ship.get_forward()
-	var heading := Vector2(forward.x, forward.z)
-	heading = heading.normalized() if heading.length_squared() > 0.0001 else Vector2.UP
-	var points := PackedVector2Array([
-		at + heading * size * 1.4,
-		at + heading.rotated(2.5) * size,
-		at + heading.rotated(-2.5) * size,
-	])
-	_overlay.draw_colored_polygon(points, color)
+	_painter.center = _center
+	_painter.size = _screen_size()
+	_painter.meters_per_pixel = _camera.size / _painter.size.y
+	_painter.draw(_overlay, controller)

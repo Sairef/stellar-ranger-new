@@ -3,8 +3,8 @@ extends Node
 
 ## Keeps the system clean. Wrecks and containers left alone for `abandon_time` are collected by
 ## a scavenger ship from `station` (see ScavengerRoutine): it undocks, loots them with its drones,
-## docks back and is gone, and so is the loot. It is an ordinary neutral ship, though: whoever
-## destroys it finds what it had collected in its wreck.
+## docks back and is gone, and so is the loot. It is an ordinary neutral ship, though, and
+## unarmed: whoever destroys it finds what it had collected in its wreck.
 ## One scavenger at a time, none while the system is on alert.
 ## With `debug_panel` set, adds an "Age wrecks +10 min" button there.
 
@@ -82,6 +82,7 @@ func _launch(wrecks: Array[Wreck]) -> void:
 	ship.acceleration = 25.0
 	ship.turn_rate = 1.0
 	ship.cargo_capacity = 2000.0
+	ship.remove_weapon()
 	var bay := DroneBay.new()
 	bay.drones = 4
 	ship.add_child(bay)

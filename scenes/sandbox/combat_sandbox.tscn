@@ -75,6 +75,7 @@ rotation = Vector3(0, 3.1416, 0)
 display_name = "Pirate 1"
 hull_color = Color(0.9, 0.25, 0.2, 1)
 faction = &"pirate"
+ship_class = 1
 
 [node name="CombatRoutine" type="Node" parent="Ships/Pirate1"]
 script = ExtResource("5_combat")

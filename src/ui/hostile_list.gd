@@ -2,16 +2,20 @@ class_name HostileList
 extends PanelContainer
 
 ## Every hostile ship in the system, nearest first, in a scrolling table (no limit: the one worth
-## attacking may be the ninth): name, class, distance, shield / armor and whom it attacks ("YOU"
-## in red when it is the player's ship). The ship the player's ship attacks is red. Click a row to
+## attacking may be the ninth): name, class, distance, hit chances right now (the player's ship
+## on it / it on the player's ship, see Hud.odds_text()), shield / armor and whom it attacks
+## ("YOU" in red when it is the player's ship). The ship the player's ship attacks is red. Click a row to
 ## select that ship, double-click it to attack. Picking one ship out of a crowded fight in 3D is
 ## hard; the table does not care how crowded the fight is.
 
 ## Seconds between refreshes of the table.
 const REFRESH_INTERVAL := 0.25
-const TITLES: Array[String] = ["Ship", "Class", "Distance", "S / A", "Attacking"]
-const WIDTHS: Array[int] = [0, 76, 80, 70, 0]
-const SIZE := Vector2(480, 250)
+const TITLES: Array[String] = ["Ship", "Class", "Distance", "Hit %", "S / A", "Attacking"]
+const WIDTHS: Array[int] = [0, 70, 76, 76, 70, 0]
+## Columns tests and tools read.
+const COLUMN_HIT := 3
+const COLUMN_ATTACKING := 5
+const SIZE := Vector2(560, 250)
 const ATTACK_COLOR := Color(1.0, 0.35, 0.3)
 
 var controller: PlayerController
@@ -113,12 +117,28 @@ func _fill(item: TreeItem, ship: Ship, own: Ship, attacked: bool) -> void:
 		gap = "%.0f m" % (own.global_position.distance_to(ship.global_position) - own.radius - ship.radius)
 	item.set_text(2, gap)
 	item.set_text_alignment(2, HORIZONTAL_ALIGNMENT_RIGHT)
-	item.set_text(3, "%d / %d" % [ceili(ship.shield), ceili(ship.armor)])
+	item.set_text(COLUMN_HIT, _hit_text(own, ship))
+	item.set_text_alignment(COLUMN_HIT, HORIZONTAL_ALIGNMENT_CENTER)
+	item.set_text(4, "%d / %d" % [ceili(ship.shield), ceili(ship.armor)])
 	var target: Ship = ship.current_order.get_attack_target() if ship.current_order != null else null
 	var at_you := target != null and target == own
-	item.set_text(4, "YOU" if at_you else Autopilot.name_of(target) if target != null else "")
-	_paint(item, 4, at_you)
+	item.set_text(COLUMN_ATTACKING, "YOU" if at_you else Autopilot.name_of(target) if target != null else "")
+	_paint(item, COLUMN_ATTACKING, at_you)
 	_paint(item, 0, attacked)
+
+
+## "85 / 21": the player's ship's hit chance on `ship` / its hit chance on the player's ship, in
+## percent; "-" for a side that is unarmed or out of range.
+func _hit_text(own: Ship, ship: Ship) -> String:
+	if own == null:
+		return ""
+	return "%s / %s" % [_percent(own, ship), _percent(ship, own)]
+
+
+func _percent(shooter: Ship, target: Ship) -> String:
+	if not shooter.is_armed() or not shooter.get_weapon().in_range(target):
+		return "-"
+	return "%d" % roundi(shooter.get_weapon().hit_chance_against(target) * 100.0)
 
 
 func _paint(item: TreeItem, column: int, red: bool) -> void:

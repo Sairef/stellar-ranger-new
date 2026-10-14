@@ -1,9 +1,9 @@
 class_name TrafficSpawner
 extends Node
 
-## Keeps the system populated with traders, medium and large ships (see ShipClass). Some start
-## docked at stations; new ones keep arriving through gates, while traders leave through gates on
-## their own (TraderRoutine).
+## Keeps the system populated with traders, medium and large ships (see ShipClass), unarmed: they
+## are what pirates prey on. Some start docked at stations; new ones keep arriving through gates,
+## while traders leave through gates on their own (TraderRoutine).
 ## Counts arrivals and departures for the debug panel.
 
 const ShipScene := preload("res://src/ships/ship.tscn")
@@ -90,6 +90,7 @@ func _create_trader() -> Ship:
 	ship.display_name = "%s %d" % [NAMES[_rng.randi() % NAMES.size()], _serial]
 	ship.hull_color = COLORS[_rng.randi() % COLORS.size()]
 	ship.ship_class = ShipClass.Size.MEDIUM if _rng.randf() < 0.5 else ShipClass.Size.LARGE
+	ship.remove_weapon()
 
 	var routine := TraderRoutine.new()
 	routine.name = "TraderRoutine"

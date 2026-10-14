@@ -1,4 +1,4 @@
-extends Node
+extends "res://tests/support/check_suite.gd"
 
 ## Headless navigation scenarios for the autopilot.
 ##
@@ -8,7 +8,6 @@ extends Node
 ## Set the environment variable NAV_DIAG=1 to also print every physical contact (what hit what),
 ## near misses between ships and every order change in the traffic scenarios.
 
-const ErrorLog := preload("res://tests/support/error_log.gd")
 const ShipScene := preload("res://src/ships/ship.tscn")
 const AsteroidScene := preload("res://src/world/asteroid.tscn")
 const StationScene := preload("res://src/world/station.tscn")
@@ -18,14 +17,8 @@ const GateScene := preload("res://src/world/gate.tscn")
 ## "Never touched" therefore means a clearly positive gap.
 const MIN_GAP := 1.0
 
-var _world: Node3D
-var _errors := ErrorLog.new()
-var _passed := 0
-var _failed := 0
-
 
 func _ready() -> void:
-	OS.add_logger(_errors)
 	await _detour_around_big_asteroid(Vector3.ZERO)
 	await _detour_around_big_asteroid(Vector3(0, 12, 0))
 	await _detour_around_big_asteroid(Vector3(0, 0, -25))
@@ -48,9 +41,7 @@ func _ready() -> void:
 	await _approach_ship_flying_past()
 	await _miner_cycle()
 	await _home_system_soak()
-	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors)
-	print("\n%d passed, %d failed" % [_passed, _failed])
-	get_tree().quit(1 if _failed > 0 else 0)
+	_finish()
 
 
 # --- Scenarios -------------------------------------------------------------------------------
@@ -247,12 +238,12 @@ func _dock_and_undock() -> void:
 	var ship := _spawn_ship("Tester", Vector3(700, 100, 300), Vector3.LEFT)
 	ship.give_order(DockOrder.new(station))
 
-	var time: float = await _simulate(90.0, func() -> bool: return ship.is_docked(), _no_probe)
+	var time: float = await _simulate(90.0, func() -> bool: return ship.is_docked())
 	_check(time > 0.0, "docked in %.1f s" % time)
 	_check(not ship.visible and not ship.is_in_group(Autopilot.SHIP_GROUP),
 			"a docked ship is hidden and out of traffic")
 	_check(ship.try_undock(), "undocked")
-	time = await _simulate(30.0, func() -> bool: return ship.current_order == null, _no_probe)
+	time = await _simulate(30.0, func() -> bool: return ship.current_order == null)
 	_check(time > 0.0, "flew out of the station in %.1f s" % time)
 	_check(ship.collision_ticks == 0, "no physical contacts (%d ticks)" % ship.collision_ticks)
 	await _end()
@@ -337,7 +328,7 @@ func _jump_through_gate(start: Vector3, title: String) -> void:
 		stats.jumped = true
 		stats.contacts = ship.collision_ticks)
 	ship.give_order(JumpOrder.new(gate))
-	var time: float = await _simulate(90.0, func() -> bool: return stats.jumped, _no_probe)
+	var time: float = await _simulate(90.0, func() -> bool: return stats.jumped)
 
 	_check(time > 0.0, "jumped out in %.1f s" % time)
 	_check(stats.contacts == 0, "no physical contacts (%d ticks)" % stats.contacts)
@@ -352,7 +343,7 @@ func _gate_arrival() -> void:
 	_check(gate.try_receive(ship, _world), "the gate lets a ship in")
 	var second := ShipScene.instantiate() as Ship
 	_check(not gate.try_receive(second, _world), "the throat takes one ship at a time")
-	var time: float = await _simulate(20.0, func() -> bool: return ship.current_order == null, _no_probe)
+	var time: float = await _simulate(20.0, func() -> bool: return ship.current_order == null)
 
 	_check(time > 0.0, "the ship cleared the gate in %.1f s" % time)
 	_check(ship.global_position.z < -gate.radius, "it came out of the front side")
@@ -374,13 +365,13 @@ func _target_leaves_the_system() -> void:
 	orbiter.give_order(OrbitOrder.new(leaver, 150.0))
 	var stats := {"gone": false}
 	leaver.tree_exited.connect(func() -> void: stats.gone = true)
-	await _simulate(90.0, func() -> bool: return stats.gone, _no_probe)
+	await _simulate(90.0, func() -> bool: return stats.gone)
 
 	# First frame after the target is freed: the orders still hold it, as the HUD would see them.
 	var labels := "%s | %s" % [chaser.get_order_label(), orbiter.get_order_label()]
 	_check(stats.gone, "the target jumped out")
 	_check(labels == "Approach - | Orbit - at 150 m", "order labels survive a freed target (%s)" % labels)
-	await _simulate(0.5, func() -> bool: return false, _no_probe)
+	await _wait(0.5)
 	_check(chaser.current_order == null and orbiter.current_order == null, "both orders ended")
 	_check(chaser.collision_ticks + orbiter.collision_ticks == 0, "no physical contacts")
 	await _end()
@@ -441,6 +432,7 @@ func _miner_cycle() -> void:
 	_world.add_child(field)
 	var ship := ShipScene.instantiate() as Ship
 	ship.display_name = "Miner"
+	ship.add_child(MiningLaser.new())
 	_world.add_child(ship)
 	_watch_contacts(ship)
 	var routine := MinerRoutine.new()
@@ -473,6 +465,7 @@ func _miner_cycle() -> void:
 func _home_system_soak() -> void:
 	_begin("Home system: 300 s of traffic, the player crosses the asteroid field")
 	var system: Node3D = load("res://scenes/systems/home_system.tscn").instantiate()
+	(system.get_node("PirateRaids") as PirateRaids).auto = false
 	_world.add_child(system)
 	var player := system.get_node("Ships/PlayerShip") as Ship
 	var stats := {"crossed": false, "ship_gap": INF, "rock_gap": INF, "miner_docks": 0}
@@ -559,18 +552,6 @@ func _expect_no_traffic_accident(ships: Array[Ship], seconds: float, rocks: Arra
 	await _end()
 
 
-func _begin(title: String) -> void:
-	print("\n== %s" % title)
-	_world = Node3D.new()
-	add_child(_world)
-
-
-func _end() -> void:
-	_world.queue_free()
-	_world = null
-	await get_tree().physics_frame
-
-
 func _spawn_asteroid(asteroid_name: String, position: Vector3, radius: float) -> Asteroid:
 	var asteroid := AsteroidScene.instantiate() as Asteroid
 	asteroid.display_name = asteroid_name
@@ -633,30 +614,3 @@ func _watch_contacts(ship: Ship) -> void:
 		print("    contact: %s hit %s at %s | %s | speed %.1f" % [ship.display_name,
 				Autopilot.name_of(collider as Node), ship.global_position.round(),
 				ship.get_order_label(), ship.speed]))
-
-
-func _no_probe() -> void:
-	pass
-
-
-## Advances the simulation until `done` returns true or `timeout` seconds pass.
-## Calls `probe` every physics tick. Returns the elapsed time, or -1.0 on timeout.
-func _simulate(timeout: float, done: Callable, probe: Callable) -> float:
-	var step := 1.0 / Engine.physics_ticks_per_second
-	var time := 0.0
-	while time < timeout:
-		await get_tree().physics_frame
-		time += step
-		probe.call()
-		if done.call():
-			return time
-	return -1.0
-
-
-func _check(condition: bool, message: String) -> void:
-	if condition:
-		_passed += 1
-		print("  PASS  " + message)
-	else:
-		_failed += 1
-		print("  FAIL  " + message)

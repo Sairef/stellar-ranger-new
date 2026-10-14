@@ -17,6 +17,15 @@ extends CharacterBody3D
 ## Drones (`is_drone`) are small craft launched by a DroneBay: they have no physical collisions
 ## and no label, and ships and drones do not steer around each other (drones are nimble and only
 ## have to keep clear of rocks and structures).
+##
+## The shield recharges by SHIELD_REGEN_FRACTION of its maximum every SHIELD_REGEN_INTERVAL
+## seconds, in a fight too; armor is only repaired at a station (StationServices; NPC ships for
+## free, see `free_repairs`). Only ships with a MiningLaser can mine.
+## Parts are child nodes: a Weapon, a DroneBay, a MiningLaser, modules (ShipModule). Modules are
+## switched on with ShipModule.activate(), next to the current order, not instead of it; they run
+## on the ship's energy, which recharges by itself.
+## A ship with `has_escape_pod` leaves an escape pod when destroyed (`pilot_ejected`): a tiny,
+## slow, unarmed ship nobody shoots at (for now), which can still fly and dock.
 ## Visuals are generated from the exported parameters (placeholder art).
 
 signal order_changed(order: ShipOrder)
@@ -28,9 +37,11 @@ signal collided(collider: Object)
 signal damaged(attacker: Ship)
 ## Emitted right before the ship is removed; its wreck is already in the scene.
 signal destroyed(ship: Ship, wreck: Wreck)
-## Emitted on every ship that fired at `victim` (hit or miss) when the victim is destroyed:
-## everyone who took part in the fight shares the reward (placeholder, see
-## docs/combat_rewards.md).
+## The ship is being destroyed and its pilot got away in `pod` (see `has_escape_pod`). Emitted
+## right before `destroyed`.
+signal pilot_ejected(ship: Ship, pod: Ship)
+## Emitted on every ship that hit `victim` when the victim is destroyed: everyone who took part
+## in the fight gets the reward (Bounties; placeholder, see docs/combat_rewards.md).
 signal helped_destroy(victim: Ship)
 
 ## Fraction of the target speed kept while the nose points straight away from the goal.
@@ -42,6 +53,17 @@ const TURN_RAMP_TIME := 0.4
 const ALL_SHIPS_GROUP := &"all_ships"
 ## Free space between hulls a ship needs right outside the port to undock, in meters.
 const UNDOCK_CLEARANCE := 20.0
+## Part of the maximum shield restored every SHIELD_REGEN_INTERVAL seconds (placeholder numbers
+## until there are shield modules).
+const SHIELD_REGEN_FRACTION := 0.05
+const SHIELD_REGEN_INTERVAL := 10.0
+## The escape pod: tiny, slow and unarmed. It comes out this far from the wreck's surface.
+const POD_RADIUS := 3.0
+const POD_SPEED := 30.0
+const POD_ACCELERATION := 15.0
+const POD_TURN_RATE := 2.0
+const POD_GAP := 10.0
+const POD_COLOR := Color(1.0, 0.6, 0.2)
 
 @export var display_name := "Ship":
 	set(value):
@@ -60,9 +82,18 @@ const UNDOCK_CLEARANCE := 20.0
 @export var faction := Factions.NEUTRAL
 ## A drone launched by a DroneBay (see above).
 @export var is_drone := false
+## An escape pod (see above): weapons never pick it, and it leaves no wreck.
+@export var is_pod := false
+## Leaves an escape pod when destroyed (the player's ships).
+@export var has_escape_pod := false
+## NPC ships have no money yet, so docking repairs their armor for free. The player's ships
+## pay for repairs at the station instead (StationServices).
+@export var free_repairs := true
+## Station to start the game docked at, if any.
+@export var start_docked_at: NodePath
 ## Placeholder class (see ShipClass). Anything but CUSTOM decides the radius, the flight and
-## durability numbers below and the weapon's damage once the ship enters the tree (at runtime
-## only), whatever they were set to.
+## durability numbers below and the weapon's damage, range and best distances once the ship
+## enters the tree (at runtime only), whatever they were set to.
 @export var ship_class := ShipClass.Size.CUSTOM
 
 @export_group("Durability")
@@ -78,19 +109,28 @@ const UNDOCK_CLEARANCE := 20.0
 ## Max turn rate in radians per second.
 @export var turn_rate := 1.5
 
+@export_group("Energy")
+## Energy for modules (ShipModule).
+@export var max_energy := 100.0
+## Energy points recharged per second.
+@export var energy_recharge := 5.0
+
 @export_group("Cargo")
-## Volume of the hold, in cargo units (see Items).
+## Volume of the hold, in cargo units (see Items). With a ship class, the hold of the small
+## version: bigger classes hold more (ShipClass.cargo_factor()).
 @export var cargo_capacity := 100.0:
 	set(value):
 		cargo_capacity = value
-		if cargo != null:
-			cargo.capacity = value
+		_update_cargo_capacity()
 
 var current_order: ShipOrder = null
 ## Current forward speed in m/s.
 var speed := 0.0
 var shield := 0.0
 var armor := 0.0
+var energy := 0.0
+## Multiplies top speed and acceleration while a module boosts the engines (Afterburner).
+var thrust_boost := 1.0
 ## What is in the hold.
 var cargo := Cargo.new()
 ## Point (Vector3) the work beam (e.g. mining laser) is aimed at, or null when it is off.
@@ -110,11 +150,13 @@ var goal_point := Vector3.ZERO
 ## Physics ticks in which the ship touched something. Avoidance should keep this at zero.
 var collision_ticks := 0
 
+## Seconds until the next shield recharge step.
+var _regen_in := SHIELD_REGEN_INTERVAL
 var _face_point: Variant = null
 ## Current turning, in radians per second around the axis it points along (global space).
 var _spin := Vector3.ZERO
-## Ids of the ships that fired at this one (a set).
-var _shot_by := {}
+## Ids of the ships that hit this one (a set).
+var _hit_by := {}
 var _gone := false
 var _docked := false
 var _dock: ObjectRef = null
@@ -145,10 +187,28 @@ func _ready() -> void:
 	collision_layer = _collision_layer
 	collision_mask = _collision_mask
 	_apply_class()
-	cargo.capacity = cargo_capacity
+	_update_cargo_capacity()
 	shield = max_shield
 	armor = max_armor
+	energy = max_energy
 	_rebuild()
+	if not Engine.is_editor_hint() and not start_docked_at.is_empty():
+		var station := get_node_or_null(start_docked_at) as SpaceBody
+		if station != null:
+			dock_instantly(station)
+
+
+## Turns the ship into one of class `size` (an upgrade at a station): new size, numbers and
+## hold. Damage taken stays in proportion.
+func set_ship_class(size: ShipClass.Size) -> void:
+	var shield_part := shield / max_shield if max_shield > 0.0 else 1.0
+	var armor_part := armor / max_armor if max_armor > 0.0 else 1.0
+	ship_class = size
+	_apply_class()
+	_update_cargo_capacity()
+	shield = max_shield * shield_part
+	armor = max_armor * armor_part
+	_update_label()
 
 
 ## Takes the numbers of `ship_class` (nothing for CUSTOM). Not in the editor: scenes keep their
@@ -166,6 +226,15 @@ func _apply_class() -> void:
 	var weapon := get_weapon()
 	if weapon != null:
 		weapon.damage = stats.damage
+		weapon.max_range = stats.weapon_range
+		weapon.best_from = stats.best_from
+		weapon.best_to = stats.best_to
+		weapon.close_share = stats.close_share
+
+
+func _update_cargo_capacity() -> void:
+	if cargo != null:
+		cargo.capacity = cargo_capacity * ShipClass.cargo_factor(ship_class)
 
 
 func give_order(order: ShipOrder) -> void:
@@ -208,11 +277,16 @@ func is_hostile_to(other: Ship) -> bool:
 	return Factions.are_hostile(faction, other.faction)
 
 
-func get_weapon() -> Weapon:
+## The first part of type `type` (a class such as Weapon) fitted to the ship, or null.
+func find_part(type: Variant) -> Node:
 	for child in get_children():
-		if child is Weapon:
+		if is_instance_of(child, type):
 			return child
 	return null
+
+
+func get_weapon() -> Weapon:
+	return find_part(Weapon) as Weapon
 
 
 ## Has a working weapon, so it is a threat: weapons and fighters pick armed targets first.
@@ -221,11 +295,50 @@ func is_armed() -> bool:
 	return weapon != null and weapon.enabled
 
 
+## Takes the weapon off (traders and the scavenger fly unarmed: pirates prey on them).
+func remove_weapon() -> void:
+	var weapon := get_weapon()
+	if weapon != null:
+		remove_child(weapon)
+		weapon.queue_free()
+
+
 func get_drone_bay() -> DroneBay:
+	return find_part(DroneBay) as DroneBay
+
+
+func get_mining_laser() -> MiningLaser:
+	return find_part(MiningLaser) as MiningLaser
+
+
+## Fitted modules, in the order they were fitted (the player's keys 1, 2, ...).
+func get_modules() -> Array[ShipModule]:
+	var modules: Array[ShipModule] = []
 	for child in get_children():
-		if child is DroneBay:
-			return child
-	return null
+		if child is ShipModule:
+			modules.append(child)
+	return modules
+
+
+## Switches on module number `index` (0 is the first, see get_modules()). Returns whether it
+## switched on (see ShipModule.can_activate()).
+func activate_module(index: int) -> bool:
+	var modules := get_modules()
+	return index >= 0 and index < modules.size() and modules[index].activate()
+
+
+## Top speed right now, in m/s: `max_speed`, or more while the engines are boosted.
+func top_speed() -> float:
+	return max_speed * thrust_boost
+
+
+## Acceleration right now, in m/s per second (see top_speed()).
+func top_acceleration() -> float:
+	return acceleration * thrust_boost
+
+
+func can_mine() -> bool:
+	return get_mining_laser() != null
 
 
 ## Drops `amount` pieces of `item` out of the hold into a cargo container behind the ship
@@ -255,15 +368,22 @@ func get_muzzle_position() -> Vector3:
 	return global_position + get_forward() * radius
 
 
+## "Combat ship (small)": the name, plus the class if it has one.
+func get_title() -> String:
+	if ship_class == ShipClass.Size.CUSTOM:
+		return display_name
+	return "%s (%s)" % [display_name, ShipClass.name_of(ship_class)]
+
+
 func get_health_text() -> String:
 	return "S %d  A %d" % [ceili(shield), ceili(armor)]
 
 
 # --- Damage ----------------------------------------------------------------------------------
 
-## Called by a weapon for every shot at this ship, hit or miss (see helped_destroy).
-func note_shot_by(shooter: Ship) -> void:
-	_shot_by[WorldRegistry.id_of(shooter)] = true
+## Called by a weapon for every hit on this ship (see helped_destroy).
+func note_hit_by(shooter: Ship) -> void:
+	_hit_by[WorldRegistry.id_of(shooter)] = true
 
 
 ## Applies weapon damage: shield first, then armor. Destroys the ship when armor runs out.
@@ -279,23 +399,68 @@ func take_hit(damage: float, attacker: Ship) -> void:
 		_destroy()
 
 
-## Explodes, leaving a wreck with what was in the hold plus some salvage. An empty drone leaves
-## nothing (the signal then passes a null wreck).
+## Armor points missing.
+func armor_damage() -> float:
+	return max_armor - armor
+
+
+## Restores up to `points` of armor. Returns how many were restored.
+func repair(points: float) -> float:
+	var restored := clampf(points, 0.0, armor_damage())
+	armor += restored
+	_update_label()
+	return restored
+
+
+## Adds up to `points` to the shield, never above the maximum. Returns how many were added.
+func charge_shield(points: float) -> float:
+	var added := clampf(points, 0.0, max_shield - shield)
+	shield += added
+	_update_label()
+	return added
+
+
+## Explodes, leaving a wreck with what was in the hold plus some salvage (an empty drone or
+## an escape pod leaves nothing: the signal then passes a null wreck), and an escape pod if the
+## ship has one.
 func _destroy() -> void:
 	_gone = true
 	give_order(null)
 	_set_in_space(false)
 	CombatEffects.explosion(self, global_position, radius)
 	var wreck: Wreck = null
-	if not is_drone or not cargo.is_empty():
+	if not (is_drone or is_pod) or not cargo.is_empty():
 		wreck = Wreck.from_ship(self)
 		wreck.enter_space(FadingEffect.root_for(self), global_position)
-	for id: int in _shot_by:
+	for id: int in _hit_by:
 		var shooter := WorldRegistry.find(id) as Ship
 		if shooter != null:
 			shooter.helped_destroy.emit(self)
+	if has_escape_pod and get_parent() != null:
+		pilot_ejected.emit(self, _launch_pod())
 	destroyed.emit(self, wreck)
 	queue_free()
+
+
+## Puts this ship's escape pod into space right above the wreck.
+func _launch_pod() -> Ship:
+	var pod := Ship.new()
+	pod.name = "EscapePod"
+	pod.display_name = "Escape pod"
+	pod.is_pod = true
+	pod.faction = faction
+	pod.hull_color = POD_COLOR
+	pod.radius = POD_RADIUS
+	pod.max_speed = POD_SPEED
+	pod.acceleration = POD_ACCELERATION
+	pod.turn_rate = POD_TURN_RATE
+	pod.max_shield = 0.0
+	pod.max_armor = 1.0
+	pod.cargo_capacity = 0.0
+	pod.free_repairs = false
+	var where := global_position + Vector3.UP * (radius + POD_GAP + POD_RADIUS)
+	pod.enter_space(get_parent(), Transform3D(global_basis, where))
+	return pod
 
 
 func get_order_label() -> String:
@@ -316,6 +481,8 @@ func dock(station: SpaceBody, corridor: int) -> void:
 	dock_corridor = corridor
 	give_order(null)
 	_set_in_space(false)
+	if free_repairs:
+		repair(armor_damage())
 	docked.emit(station)
 
 
@@ -399,6 +566,8 @@ func _set_in_space(present: bool) -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or _gone:
 		return
+	_recharge_shield(delta)
+	energy = minf(max_energy, energy + energy_recharge * delta)
 	if _docked:
 		if docked_at == null:
 			vanish()  # The station is gone, and the ship was inside it.
@@ -419,9 +588,20 @@ func _physics_process(delta: float) -> void:
 	_fly(delta)
 
 
+## Every SHIELD_REGEN_INTERVAL seconds adds SHIELD_REGEN_FRACTION of the maximum shield.
+func _recharge_shield(delta: float) -> void:
+	_regen_in -= delta
+	if _regen_in > 0.0:
+		return
+	_regen_in += SHIELD_REGEN_INTERVAL
+	if shield < max_shield:
+		charge_shield(max_shield * SHIELD_REGEN_FRACTION)
+
+
 func _process(_delta: float) -> void:
 	if Engine.is_editor_hint() or _engine_glow == null:
 		return
+	# Past the normal top speed (boosted engines) the glow grows bigger still.
 	_engine_glow.scale = Vector3.ONE * lerpf(0.3, 1.3, speed / max_speed)
 	_update_beam()
 
@@ -442,7 +622,7 @@ func _fly(delta: float) -> void:
 		var alignment := (get_forward().dot(heading) + 1.0) * 0.5
 		target_speed *= lerpf(MIN_TURN_SPEED_FACTOR, 1.0, alignment * alignment)
 
-	speed = move_toward(speed, target_speed, acceleration * delta)
+	speed = move_toward(speed, target_speed, top_acceleration() * delta)
 	velocity = get_forward() * speed
 	move_and_slide()
 	if get_slide_collision_count() > 0:

@@ -1,25 +1,17 @@
-extends Node
+extends "res://tests/support/check_suite.gd"
 
 ## Headless checks for the invasion event in the home system: the whole cycle from the gate
 ## warming up to the all clear, and how everyone reacts on the way.
 ## Run from the project folder (exit code 0 when everything passes):
 ##   godot --headless --path . --fixed-fps 60 res://tests/invasion_checks.tscn
 
-const ErrorLog := preload("res://tests/support/error_log.gd")
 const SystemScene := preload("res://scenes/systems/home_system.tscn")
-
-var _errors := ErrorLog.new()
-var _passed := 0
-var _failed := 0
 
 
 func _ready() -> void:
-	OS.add_logger(_errors)
 	await _small_invasion_full_cycle()
 	await _default_invasion()
-	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors.slice(0, 5))
-	print("\n%d passed, %d failed" % [_passed, _failed])
-	get_tree().quit(1 if _failed > 0 else 0)
+	_finish()
 
 
 ## Three invaders, a garrison of four (all classes, so big ships dock too): follow the event from
@@ -28,6 +20,7 @@ func _small_invasion_full_cycle() -> void:
 	print("\n== Small invasion: warm-up, reactions, fight, all clear, back to normal")
 	var system := SystemScene.instantiate() as Node3D
 	var invasion := system.get_node("Invasion") as Invasion
+	(system.get_node("PirateRaids") as PirateRaids).auto = false  # Only the invasion here.
 	invasion.event_seed = 5
 	invasion.small_invaders = 2
 	invasion.medium_invaders = 1
@@ -41,7 +34,7 @@ func _small_invasion_full_cycle() -> void:
 	var gate := system.get_node("Gates/EastGate") as Gate
 
 	# Let the traffic get going first.
-	await _run(30.0)
+	await _wait(30.0)
 	var events := _EventLog.new(self, security, gate)
 	invasion.start(gate)
 	_check(gate.active and security.alert, "the gate lights up and the system goes on alert at once")
@@ -71,10 +64,16 @@ func _small_invasion_full_cycle() -> void:
 	var normal := {"miner_undocked": false}
 	for miner in get_tree().get_nodes_in_group(MinerRoutine.GROUP):
 		(miner as Ship).undocked.connect(func(_s: SpaceBody) -> void: normal.miner_undocked = true)
-	await _run(40.0)
+	await _wait(40.0)
 	_check(normal.miner_undocked, "after the all clear miners go back to work")
 	_check(events.patrols_on_routine(), "patrols are back on their routes")
-	_check(events.defenders_docked(), "the garrison is back home")
+	# Defenders that chased an invader far may need longer to fly home and get a port.
+	var waited := 40.0
+	while waited < 120.0 and not events.defenders_docked():
+		await _wait(1.0)
+		waited += 1.0
+	_check(events.defenders_docked(), "the garrison is back home %.0f s after the all clear %s"
+			% [waited, events.defenders_out()])
 	_check(events.contacts() == 0, "no physical contacts during the whole event (%d ticks)" % events.contacts())
 	system.queue_free()
 	await get_tree().physics_frame
@@ -85,14 +84,15 @@ func _default_invasion() -> void:
 	print("\n== Default invasion (as the debug button starts it)")
 	var system := SystemScene.instantiate() as Node3D
 	var invasion := system.get_node("Invasion") as Invasion
+	(system.get_node("PirateRaids") as PirateRaids).auto = false  # Only the invasion here.
 	invasion.event_seed = 11
 	add_child(system)
 	var button := _find_button(system.get_node("DebugPanel"), "Start invasion")
 	_check(button != null, "the debug panel has a Start invasion button")
-	await _run(5.0)
+	await _wait(5.0)
 	button.pressed.emit()
 	_check(invasion.is_running() and button.disabled, "the button starts it and is disabled while it runs")
-	await _run(120.0)
+	await _wait(120.0)
 	_check(invasion.invaders_arrived == invasion.fleet_size(),
 			"the whole fleet came through (%d)" % invasion.invaders_arrived)
 	_check(invasion.defenders_launched == invasion.garrison_size(),
@@ -101,25 +101,11 @@ func _default_invasion() -> void:
 	await get_tree().physics_frame
 
 
-func _run(seconds: float) -> void:
-	for i in int(seconds * Engine.physics_ticks_per_second):
-		await get_tree().physics_frame
-
-
 func _find_button(root: Node, text: String) -> Button:
 	for node in root.find_children("*", "Button", true, false):
 		if (node as Button).text == text:
 			return node
 	return null
-
-
-func _check(condition: bool, message: String) -> void:
-	if condition:
-		_passed += 1
-		print("  PASS  " + message)
-	else:
-		_failed += 1
-		print("  FAIL  " + message)
 
 
 ## Watches the ships of the system during an invasion and counts what they do.
@@ -191,11 +177,16 @@ class _EventLog:
 		return true
 
 	func defenders_docked() -> bool:
+		return defenders_out().is_empty()
+
+	## "Defender 3: Dock at Bastion Outpost (waiting)" for every defender not docked.
+	func defenders_out() -> PackedStringArray:
+		var out := PackedStringArray()
 		for node in _tree.get_nodes_in_group(CombatRoutine.GROUP):
 			var ship := node as Ship
 			if ship.faction != Factions.INVADER and not ship.is_docked():
-				return false
-		return true
+				out.append("%s: %s" % [ship.display_name, ship.get_order_label()])
+		return out
 
 	func wrecks() -> int:
 		var count := 0

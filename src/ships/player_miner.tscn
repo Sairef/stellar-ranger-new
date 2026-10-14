@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://src/ships/miner_ship.tscn" id="1_miner"]
+
+[node name="PlayerMiner" instance=ExtResource("1_miner")]
+display_name = "Mining ship"
+hull_color = Color(0.3, 0.75, 1, 1)
+faction = &"player"
+has_escape_pod = true
+free_repairs = false
+ship_class = 1
+cargo_capacity = 200.0

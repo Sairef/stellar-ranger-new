@@ -3,9 +3,11 @@ extends Node
 
 ## NPC miner brain, placed as a child of a Ship: undock from the home station, fly into the
 ## asteroid field, mine a rock until the hold is full, fly home, dock and unload. Forever.
+## The ship needs a MiningLaser: without one it would fly to the rock and home with nothing.
 ## Miners claim their rock, so two miners never work the same one.
-## On alert (SystemSecurity) a miner in space drops its work and runs home to dock; a docked miner
-## stays docked until the all clear.
+## On alert (SystemSecurity), or with a hostile ship within `flee_distance`, a miner in space drops
+## its work and runs home to dock; a docked miner stays docked until the all clear and while
+## hostiles are within `flee_distance` of the field.
 
 const GROUP := &"miners"
 
@@ -19,6 +21,8 @@ enum Step { GO_TO_ROCK, MINE, GO_HOME }
 @export var unload_time := Vector2(6.0, 12.0)
 ## If not negative: start docked at home and undock after this many seconds.
 @export var start_docked_for := -1.0
+## A hostile ship this close (to the miner, or to the field while docked) sends it home, in meters.
+@export var flee_distance := 2500.0
 
 ## Seconds until the ship undocks (while docked).
 var undock_in := 0.0
@@ -60,15 +64,14 @@ func _start_docked() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	var security := SystemSecurity.of(self)
-	var alert := security != null and security.alert
 	if _ship.is_docked():
-		if not alert:
+		var area := get_node_or_null(field) as Node3D
+		if not _in_danger(area.global_position if area != null else _ship.global_position):
 			undock_in -= delta
 			if undock_in <= 0.0:
 				_ship.try_undock()
 		return
-	if alert:
+	if _in_danger(_ship.global_position):
 		_shelter()
 		return
 	_sheltering = false
@@ -98,7 +101,13 @@ func _physics_process(delta: float) -> void:
 			_step = Step.GO_TO_ROCK
 
 
-## Runs home and docks, once per alert.
+## The system is on alert, or a hostile ship is within `flee_distance` of `point`.
+func _in_danger(point: Vector3) -> bool:
+	var security := SystemSecurity.of(self)
+	return security != null and (security.alert or security.threat_within(point, flee_distance) != null)
+
+
+## Runs home and docks, once per danger.
 func _shelter() -> void:
 	var order := _ship.current_order
 	if _sheltering and order != null:

@@ -4,9 +4,12 @@
 [ext_resource type="Script" path="res://src/ships/drone_bay.gd" id="2_bay"]
 
 [node name="PlayerShip" instance=ExtResource("1_ship")]
-display_name = "You"
+display_name = "Combat ship"
 hull_color = Color(0.3, 0.75, 1, 1)
 faction = &"player"
+has_escape_pod = true
+free_repairs = false
+ship_class = 1
 
 [node name="DroneBay" type="Node" parent="."]
 script = ExtResource("2_bay")

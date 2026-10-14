@@ -1,17 +1,21 @@
 class_name Hud
 extends CanvasLayer
 
-## Minimal flight HUD: ship status, credits, selected target, command buttons and
-## controls help, the list of hostile ships (HostileList), a banner with the system's alert
-## state and announcements (see SystemSecurity), the cargo window (I, or by itself when looting
-## stops because the hold is full) and the tactical map (M, TacticalMap).
+## Minimal flight HUD: ship status, credits, selected target (with how well both sides would hit
+## each other right now, odds_text()), command buttons, module buttons
+## (keys 1, 2, ...) and controls help, the list of hostile ships (HostileList), a banner with the
+## system's alert state, hostiles around and announcements (see SystemSecurity; warnings sound the
+## alarm) and the news that the player's ship was lost, the cargo window (I, or by itself when
+## looting stops because the hold is full), the station window (StationWindow, while docked), the
+## minimap in the bottom right corner (Minimap) and the tactical map (M, TacticalMap).
+## A reward rings a coin (Sfx).
 ## Built in code for now; it will become a proper scene once the UI grows.
 
 @export var controller: PlayerController
 @export var debug_draw: NavDebugDraw
 
 const HELP_TEXT := "LMB: select   Double click: approach object / fly to point   " \
-		+ "RMB drag / arrows: rotate camera   Wheel: zoom   M: map   F3: navigation debug"
+		+ "Z / X: fight closer / farther   RMB drag / arrows: rotate camera   Wheel: zoom   M: map"
 
 ## Offset of the hover name from the mouse cursor, in pixels.
 const HOVER_OFFSET := Vector2(18, 10)
@@ -22,8 +26,16 @@ const ALERT_COLOR := Color(1.0, 0.45, 0.35)
 const CALM_COLOR := Color(0.6, 1.0, 0.6)
 ## Seconds the last credits reward stays on screen.
 const REWARD_NOTE_TIME := 4.0
+## Seconds the news of a lost ship stays on screen.
+const LOSS_NOTE_TIME := 10.0
 ## Room left for the controls help line at the bottom, in pixels.
 const HELP_LINE_HEIGHT := 32.0
+## Side of the minimap: this share of the screen height, within the limits, in pixels.
+const MINIMAP_SHARE := 0.36
+const MINIMAP_MIN := 220.0
+const MINIMAP_MAX := 460.0
+## Gap between panels and from the screen edges, in pixels.
+const MARGIN := 12.0
 
 var _status: Label
 var _approach_button: Button
@@ -31,13 +43,24 @@ var _orbit_button: Button
 var _attack_button: Button
 var _loot_button: Button
 var _loot_all_button: Button
+var _dock_button: Button
+var _mine_button: Button
 var _cargo_window: CargoWindow
+var _station_window: StationWindow
 var _hostile_list: HostileList
+var _minimap: Minimap
 var _map: TacticalMap
 var _hover_label: Label
 var _banner: Label
+var _modules_row: HBoxContainer
+## Ids of the modules the buttons are for, to rebuild them only when that changes.
+var _shown_modules: Array[int] = []
 var _reward_note := ""
 var _reward_note_time := 0.0
+var _loss_note := ""
+var _loss_note_time := 0.0
+## SystemSecurity.announcements already seen (to sound a new warning once).
+var _announcements_seen := 0
 
 
 func _ready() -> void:
@@ -68,19 +91,26 @@ func _ready() -> void:
 	column.add_child(more)
 	_loot_button = _add_button(more, "Loot [R]", controller.loot_selected)
 	_loot_all_button = _add_button(more, "Loot all [T]", controller.loot_all)
+	_dock_button = _add_button(more, "Dock [D]", controller.dock_selected)
+	_mine_button = _add_button(more, "Mine [F]", controller.mine_selected)
 	_add_button(more, "Cargo [I]", _toggle_cargo)
 	_add_button(more, "Map [M]", _map.toggle)
 	if debug_draw != null:
 		_add_button(more, "Debug [F3]", debug_draw.toggle)
+	_modules_row = HBoxContainer.new()
+	column.add_child(_modules_row)
 
 	_cargo_window = CargoWindow.new()
 	_cargo_window.controller = controller
 	add_child(_cargo_window)
 	_cargo_window.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	controller.hold_full.connect(func() -> void: _cargo_window.open(CargoWindow.HOLD_FULL_NOTE))
-	controller.credits_earned.connect(func(amount: int, enemy: String) -> void:
-		_reward_note = "+%d for %s" % [amount, enemy]
-		_reward_note_time = REWARD_NOTE_TIME)
+	controller.credits_earned.connect(_on_credits_earned)
+	controller.ship_lost.connect(_on_ship_lost)
+
+	_station_window = StationWindow.new()
+	_station_window.controller = controller
+	add_child(_station_window)
 
 	var help := Label.new()
 	help.text = HELP_TEXT
@@ -97,6 +127,11 @@ func _ready() -> void:
 	_hostile_list.offset_top -= HELP_LINE_HEIGHT
 	_hostile_list.offset_bottom -= HELP_LINE_HEIGHT
 
+	_minimap = Minimap.new()
+	_minimap.controller = controller
+	_minimap.map = _map
+	add_child(_minimap)
+
 	_hover_label = Label.new()
 	_hover_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hover_label.add_theme_constant_override("outline_size", 6)
@@ -106,6 +141,8 @@ func _ready() -> void:
 	_banner = Label.new()
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	# Long announcements wrap within the room between the hostile list and the minimap.
+	_banner.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_banner.add_theme_font_size_override("font_size", 22)
 	_banner.add_theme_constant_override("outline_size", 8)
 	_banner.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -114,8 +151,31 @@ func _ready() -> void:
 	_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_banner.offset_bottom = -BANNER_BOTTOM
-	# Centered in the space right of the hostile list, so it never covers the list.
-	_banner.offset_left = _hostile_list.offset_right + 12.0
+	# Centered in the space between the hostile list and the minimap, so it covers neither.
+	_banner.offset_left = _hostile_list.offset_right + MARGIN
+	_layout()
+	get_viewport().size_changed.connect(_layout)
+
+
+## Places what depends on the screen size: the minimap in the bottom right corner above the
+## controls help line, the station window left of it, the banner between them and the hostile list.
+func _layout() -> void:
+	var side := clampf(get_viewport().get_visible_rect().size.y * MINIMAP_SHARE, MINIMAP_MIN, MINIMAP_MAX)
+	_minimap.custom_minimum_size = Vector2(side, side)
+	_place_bottom_right(_minimap, 0.0)
+	_place_bottom_right(_station_window, side + MARGIN)
+	_banner.offset_right = -(side + 2.0 * MARGIN)
+
+
+## Anchors `panel` to the bottom right corner, above the help line, `shift` pixels to the left.
+func _place_bottom_right(panel: Control, shift: float) -> void:
+	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, int(MARGIN))
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	panel.offset_left -= shift
+	panel.offset_right -= shift
+	panel.offset_top -= HELP_LINE_HEIGHT
+	panel.offset_bottom -= HELP_LINE_HEIGHT
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -128,9 +188,38 @@ func _toggle_cargo() -> void:
 	_cargo_window.toggle()
 
 
+## "You hit 85%   It hits you 21%": how `own` and `other` would hit each other right now, the
+## same numbers their weapons fire with (Weapon.hit_chance_against()). Empty if neither is armed.
+static func odds_text(own: Ship, other: Ship) -> String:
+	var parts := PackedStringArray()
+	if own.is_armed():
+		var mine := own.get_weapon()
+		parts.append("You hit %d%%" % roundi(mine.hit_chance_against(other) * 100.0)
+				if mine.in_range(other) else "You: out of range")
+	if other.is_armed() and other.is_hostile_to(own):
+		var theirs := other.get_weapon()
+		parts.append("It hits you %d%%" % roundi(theirs.hit_chance_against(own) * 100.0)
+				if theirs.in_range(own) else "It: out of range")
+	return "   ".join(parts)
+
+
+func _on_credits_earned(amount: int, enemy: String) -> void:
+	_reward_note = "+%d for %s" % [amount, enemy]
+	_reward_note_time = REWARD_NOTE_TIME
+	Sfx.play_ui(self, &"reward")
+
+
+func _on_ship_lost(title: String) -> void:
+	_loss_note = "Your %s was destroyed!\nYou got away in the escape pod: dock at a station (D) for a new ship." % title
+	_loss_note_time = LOSS_NOTE_TIME
+	Sfx.play_ui(self, &"explosion", 3.0, 0.6)
+
+
 func _process(delta: float) -> void:
 	_update_banner()
+	_update_modules()
 	_reward_note_time -= delta
+	_loss_note_time -= delta
 	var hovered := controller.hovered
 	_hover_label.visible = hovered != null
 	if hovered != null:
@@ -138,13 +227,17 @@ func _process(delta: float) -> void:
 		_hover_label.position = get_viewport().get_mouse_position() + HOVER_OFFSET
 
 	var has_ship := controller.has_ship()
-	var ship := controller.ship if has_ship else null
+	# Docked too: the ship is there, it just takes no orders.
+	var ship := controller.ship
 	var target := controller.selected
 	var lines := PackedStringArray()
-	if has_ship:
-		lines.append("%s   speed %3.0f / %.0f m/s" % [ship.display_name, ship.speed, ship.max_speed])
-		lines.append("Shield %.0f / %.0f   Armor %.0f / %.0f" % [
-				ship.shield, ship.max_shield, ship.armor, ship.max_armor])
+	if ship != null:
+		lines.append("%s   speed %3.0f / %.0f m/s" % [ship.get_title(), ship.speed, ship.top_speed()])
+		var durability := "Shield %.0f / %.0f   Armor %.0f / %.0f" % [
+				ship.shield, ship.max_shield, ship.armor, ship.max_armor]
+		if not ship.get_modules().is_empty():
+			durability += "   Energy %.0f / %.0f" % [ship.energy, ship.max_energy]
+		lines.append(durability)
 		lines.append("Order: %s" % ship.get_order_label())
 		var cargo_line := "Cargo %d / %.0f" % [ship.cargo.total(), ship.cargo.capacity]
 		var bay: DroneBay = ship.get_drone_bay()
@@ -155,17 +248,15 @@ func _process(delta: float) -> void:
 				cargo_line += " (%d out)" % out
 		lines.append(cargo_line)
 	else:
-		lines.append("Your ship has been destroyed")
+		lines.append("You have no ship (debug panel: Respawn player)")
 	var credits_line := "Credits %d" % controller.credits
 	if _reward_note_time > 0.0:
 		credits_line += "   %s" % _reward_note
 	lines.append(credits_line)
 
 	if target != null:
-		var line := "Target: %s" % Autopilot.name_of(target)
 		var target_ship := target as Ship
-		if target_ship != null and target_ship.ship_class != ShipClass.Size.CUSTOM:
-			line += " (%s)" % ShipClass.name_of(target_ship.ship_class)
+		var line := "Target: %s" % (target_ship.get_title() if target_ship != null else Autopilot.name_of(target))
 		if has_ship:
 			var gap := ship.global_position.distance_to(target.global_position) \
 					- Autopilot.radius_of(target) - ship.radius
@@ -177,6 +268,10 @@ func _process(delta: float) -> void:
 			if not other.cargo.is_empty():
 				activity += "   cargo %d" % other.cargo.total()
 			lines.append("   " + activity)
+			if has_ship and (ship.is_hostile_to(other) or controller.attack_target() == other):
+				var odds := odds_text(ship, other)
+				if not odds.is_empty():
+					lines.append("   " + odds)
 		elif target is Wreck:
 			var wreck := target as Wreck
 			if wreck.inspected:
@@ -191,20 +286,55 @@ func _process(delta: float) -> void:
 	_attack_button.disabled = not has_ship or not controller.can_attack_selected()
 	_loot_button.disabled = not controller.can_loot_selected()
 	_loot_all_button.disabled = not controller.can_loot()
+	_dock_button.disabled = not controller.can_dock_selected()
+	_mine_button.disabled = not controller.can_mine_selected()
 
 
 func _update_banner() -> void:
 	var security := SystemSecurity.of(self)
 	var lines := PackedStringArray()
+	var danger := _loss_note_time > 0.0
+	if danger:
+		lines.append(_loss_note)
 	if security != null:
+		if security.announcements != _announcements_seen:
+			_announcements_seen = security.announcements
+			if security.announcement_is_warning:
+				Sfx.play_ui(self, &"alert")
 		var announcement := security.current_announcement()
 		if not announcement.is_empty():
 			lines.append(announcement)
+		var count := security.threats().size()
 		if security.alert:
-			var count := security.threats().size()
 			lines.append("ALERT: %d hostile ships in the system" % count if count > 0 else "ALERT")
+		elif count > 0:
+			lines.append("Hostile ships in the system: %d" % count)
+		danger = danger or security.alert or count > 0
 	_banner.text = "\n".join(lines)
-	_banner.modulate = ALERT_COLOR if security != null and security.alert else CALM_COLOR
+	_banner.modulate = ALERT_COLOR if danger else CALM_COLOR
+
+
+## One button per module of the ship (keys 1, 2, ...), with its state.
+func _update_modules() -> void:
+	var ship := controller.ship
+	var modules: Array[ShipModule] = []
+	if ship != null:
+		modules = ship.get_modules()
+	var ids: Array[int] = []
+	for module in modules:
+		ids.append(module.get_instance_id())
+	if ids != _shown_modules:
+		_shown_modules = ids
+		for child in _modules_row.get_children():
+			_modules_row.remove_child(child)
+			child.queue_free()
+		for i in modules.size():
+			_add_button(_modules_row, "", controller.use_module.bind(i))
+	var buttons := _modules_row.get_children()
+	for i in modules.size():
+		var button := buttons[i] as Button
+		button.text = "%s [%d]: %s" % [modules[i].title, i + 1, modules[i].get_state_text()]
+		button.disabled = not modules[i].can_activate()
 
 
 func _add_button(parent: Control, text: String, action: Callable) -> Button:

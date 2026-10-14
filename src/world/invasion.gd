@@ -127,7 +127,7 @@ func start(through: Gate = null) -> void:
 	var security := SystemSecurity.of(self)
 	if security != null:
 		security.raise_alert(chosen, warmup_time + _queue.size() * arrival_interval)
-	_announce("%s is activating: unknown ships incoming!" % Autopilot.name_of(chosen))
+	_announce("%s is activating: unknown ships incoming!" % Autopilot.name_of(chosen), true)
 	_set_button_ready(false)
 
 
@@ -143,7 +143,7 @@ func _physics_process(delta: float) -> void:
 				phase = Phase.FIGHTING
 			elif _timer <= 0.0:
 				phase = Phase.ARRIVING
-				_announce("Hostile fleet coming through %s!" % Autopilot.name_of(gate))
+				_announce("Hostile fleet coming through %s!" % Autopilot.name_of(gate), true)
 		Phase.ARRIVING:
 			_timer -= delta
 			if gate == null:
@@ -291,10 +291,10 @@ func _random_gate() -> Gate:
 	return options[_rng.randi() % options.size()] if not options.is_empty() else null
 
 
-func _announce(text: String) -> void:
+func _announce(text: String, warning := false) -> void:
 	var security := SystemSecurity.of(self)
 	if security != null:
-		security.announce(text)
+		security.announce(text, warning)
 
 
 func _set_button_ready(available: bool) -> void:

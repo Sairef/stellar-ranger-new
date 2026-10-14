@@ -2,10 +2,9 @@ class_name MineOrder
 extends ShipOrder
 
 ## Hold position next to a rock, nose toward it, and mine with the beam until the hold is full.
-## Mining only happens while the ship is (almost) stopped. Ends if the rock is gone.
+## Mining only happens while the ship is (almost) stopped, at the rate of its MiningLaser.
+## Ends if the rock is gone, or at once for a ship without a mining laser.
 
-## Pieces of ore mined per second.
-const MINING_RATE := 4.0
 const MINING_MAX_SPEED := 2.0
 
 ## The live rock, or null once it is gone.
@@ -35,10 +34,11 @@ func get_target() -> Node3D:
 
 func update(ship: Ship, delta: float) -> void:
 	var node := rock
-	if node == null or ship.speed > MINING_MAX_SPEED:
+	var laser := ship.get_mining_laser()
+	if node == null or laser == null or ship.speed > MINING_MAX_SPEED:
 		ship.beam_target = null
 		return
-	_progress += MINING_RATE * delta
+	_progress += laser.mining_rate() * delta
 	var pieces := floori(_progress)
 	if pieces > 0:
 		_progress -= pieces
@@ -60,4 +60,4 @@ func get_goal(ship: Ship) -> NavGoal:
 
 
 func is_complete(ship: Ship) -> bool:
-	return rock == null or ship.cargo.room() < 1.0
+	return rock == null or ship.cargo.room() < 1.0 or not ship.can_mine()

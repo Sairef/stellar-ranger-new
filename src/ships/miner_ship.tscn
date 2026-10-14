@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/ships/ship.gd" id="1_ship"]
+[ext_resource type="Script" path="res://src/ships/mining_laser.gd" id="2_laser"]
+
+[node name="MinerShip" type="CharacterBody3D"]
+motion_mode = 1
+script = ExtResource("1_ship")
+display_name = "Mining ship"
+
+[node name="MiningLaser" type="Node" parent="."]
+script = ExtResource("2_laser")

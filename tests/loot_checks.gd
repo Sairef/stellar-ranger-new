@@ -1,24 +1,17 @@
-extends Node
+extends "res://tests/support/check_suite.gd"
 
 ## Headless checks for loot: cargo holds, wrecks, drones, loot orders, the cargo window and
 ## the system scavenger.
 ## Run from the project folder (exit code 0 when everything passes):
 ##   godot --headless --path . --fixed-fps 60 res://tests/loot_checks.tscn
 
-const ErrorLog := preload("res://tests/support/error_log.gd")
 const ShipScene := preload("res://src/ships/ship.tscn")
 const PlayerShipScene := preload("res://src/ships/player_ship.tscn")
 const AsteroidScene := preload("res://src/world/asteroid.tscn")
 const StationScene := preload("res://src/world/station.tscn")
 
-var _world: Node3D
-var _errors := ErrorLog.new()
-var _passed := 0
-var _failed := 0
-
 
 func _ready() -> void:
-	OS.add_logger(_errors)
 	_cargo_holds()
 	await _target_priority()
 	await _wreck_contents()
@@ -28,9 +21,7 @@ func _ready() -> void:
 	await _things_vanish_while_looting()
 	await _scavenger()
 	await _scavenger_destroyed()
-	_check(_errors.errors.is_empty(), "no errors during the run %s" % _errors.errors.slice(0, 5))
-	print("\n%d passed, %d failed" % [_passed, _failed])
-	get_tree().quit(1 if _failed > 0 else 0)
+	_finish()
 
 
 # --- Scenarios -------------------------------------------------------------------------------
@@ -228,6 +219,7 @@ func _scavenger_destroyed() -> void:
 		var ship := service.scavenger
 		return ship != null and ship.cargo.count(Items.LOOT_2) == 3)
 	_check(time > 0.0, "the scavenger loaded the wreck (%.1f s)" % time)
+	_check(not service.scavenger.is_armed(), "it is unarmed: anyone can take its load")
 	var stats := {"parts": 0, "wreck": ""}
 	service.scavenger.destroyed.connect(func(_ship: Ship, wreck: Wreck) -> void:
 		stats.parts = wreck.cargo.count(Items.LOOT_2)
@@ -239,22 +231,6 @@ func _scavenger_destroyed() -> void:
 
 
 # --- Helpers ---------------------------------------------------------------------------------
-
-func _begin(title: String) -> void:
-	print("\n== %s" % title)
-	_world = Node3D.new()
-	add_child(_world)
-
-
-func _end() -> void:
-	_world.queue_free()
-	_world = null
-	# Wrecks, containers and effects live in the current scene, not in the scenario's world.
-	for child in get_children():
-		if child is Wreck or child is FadingEffect:
-			child.queue_free()
-	await get_tree().physics_frame
-
 
 func _spawn_ship(ship_name: String, position: Vector3, faction: StringName, drone := false) -> Ship:
 	var ship := ShipScene.instantiate() as Ship
@@ -314,27 +290,3 @@ func _find_cargo_window(hud: Hud) -> CargoWindow:
 		if child is CargoWindow:
 			return child
 	return null
-
-
-## Advances the simulation until `done` returns true or `timeout` seconds pass, calling `probe`
-## every tick. Returns the elapsed time, or -1.0 on timeout.
-func _simulate(timeout: float, done: Callable, probe := Callable()) -> float:
-	var step := 1.0 / Engine.physics_ticks_per_second
-	var time := 0.0
-	while time < timeout:
-		await get_tree().physics_frame
-		time += step
-		if probe.is_valid():
-			probe.call()
-		if done.call():
-			return time
-	return -1.0
-
-
-func _check(condition: bool, message: String) -> void:
-	if condition:
-		_passed += 1
-		print("  PASS  " + message)
-	else:
-		_failed += 1
-		print("  FAIL  " + message)

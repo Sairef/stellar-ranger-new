@@ -7,7 +7,10 @@ extends Node
 ## Left click: select an object. Double click: approach the object under the cursor,
 ## or fly to that point on the ship's horizontal plane if there is nothing there.
 ## Q: approach selected, W: orbit selected, E: attack selected ship, Space: stop,
-## R: loot the selected wreck or container, T: loot everything within `loot_radius`.
+## R: loot the selected wreck or container, T: loot everything within `loot_radius`,
+## D: dock at the selected station, F: mine the selected rock (mining ships only).
+## 1, 2, ...: switch on the ship's first, second, ... module (Ship.get_modules()).
+## Z / X: fight (or orbit) closer / farther, by DISTANCE_STEP meters (see "Distance" below).
 ## The object under the cursor gets a faint ring (`hovered`), so it is clear what a click selects.
 ## The ship the player's ship attacks (`attack_target()`) gets red corner brackets, whether it was
 ## picked by the player or by auto-engage.
@@ -19,9 +22,19 @@ extends Node
 ## It never overrides an order the player gave, and after Stop the ship does not go back for the
 ## target it was fighting: only a hostile it has not fought yet starts a new attack.
 ##
-## Credits (the one galactic currency, placeholder reward): +1 for every destroyed enemy the
-## player's ship fired at, whoever finished it off (see docs/combat_rewards.md). No real
-## factions, reputation or shop yet.
+## Distance: how close to fight decides how well both sides hit (Weapon.hit_chance_against()).
+## Attacks start at the weapon's best distance; Z / X change the distance of the attack (or the
+## orbit) under way, and later attacks keep the new one until the player flies another ship.
+##
+## Credits (the one galactic currency): the bounty for every destroyed enemy the player's ship
+## fired at, whoever finished it off (Bounties). Spent and earned at stations: while the ship is
+## docked, the station sells it repairs, modules and an upgrade to the next class and buys its
+## cargo (StationServices).
+##
+## The player owns several ships (`fleet`, e.g. a combat ship and a mining ship) but flies one:
+## `ship`. At a station the player can board another own ship docked there; the one left behind
+## stays docked. When the ship is destroyed, the pilot gets away in its escape pod, which becomes
+## `ship`; once the pod docks, the station gives the pilot a new starter ship (`starter_ship`).
 ##
 ## The player sees what is inside wrecks only once the ship or one of its drones comes within
 ## Wreck.INSPECT_RANGE. When looting stops because the hold is full, `hold_full` is emitted
@@ -32,17 +45,49 @@ signal selection_changed(target: Node3D)
 signal hold_full
 ## Credits were earned for destroying `enemy`.
 signal credits_earned(amount: int, enemy: String)
+## The player now flies `ship` (boarded at a station, the escape pod, a new starter ship), or
+## has none.
+signal ship_changed(ship: Ship)
+## The ship the player flew was destroyed (`title`, e.g. "Combat ship (medium)"); the pilot got
+## away in the escape pod.
+signal ship_lost(title: String)
 
-## The player's ship, or null while there is none (e.g. destroyed).
+## The ship the player flies, docked or not, or null while there is none.
 @export var ship: Ship:
 	get:
 		return _ship.resolve() as Ship if _ship != null else null
 	set(value):
 		_ship = ObjectRef.to(value)
 		_engaged = ObjectRef.new()
-		if value != null and not value.helped_destroy.is_connected(_on_helped_destroy):
-			value.helped_destroy.connect(_on_helped_destroy)
+		_loot_order = null
+		_undock_requested = false
+		_attack_distance = 0.0
+		if value != null:
+			_hook(value)
+			_own(value)
+			if follow_camera != null:
+				follow_camera.target = value
+		ship_changed.emit(value)
+## Every ship the player owns that still exists, `ship` included.
+@export var fleet: Array[Ship]:
+	get:
+		var live: Array[Ship] = []
+		for ref in _fleet:
+			var owned := ref.resolve() as Ship
+			if owned != null:
+				live.append(owned)
+		return live
+	set(value):
+		_fleet.clear()
+		_own(ship)
+		for owned in value:
+			_own(owned)
+## The camera used to pick objects under the cursor (the tactical map swaps its own in).
 @export var camera: Camera3D
+## The camera that follows the ship the player flies.
+@export var follow_camera: OrbitCamera
+## What a station gives a pilot who docks in an escape pod.
+@export var starter_ship: PackedScene = preload("res://src/ships/player_ship.tscn")
 ## See "Auto-engage" above.
 @export var auto_engage := true
 ## Radius of Loot all around the ship, in meters.
@@ -51,6 +96,8 @@ signal credits_earned(amount: int, enemy: String)
 @export var approach_distance := 50.0
 ## Distance from the target's surface for the Orbit command, in meters.
 @export var orbit_distance := 100.0
+## Gap between the hull and the rock surface while mining, in meters.
+@export var mining_distance := 25.0
 
 ## See "Credits" above.
 var credits := 0
@@ -79,8 +126,20 @@ const MIN_BRACKETS_PIXELS := 36.0
 const AUTO_ENGAGE_NOTE := "auto: nearest hostile in range"
 ## Longest move order from a double click, in meters.
 const MAX_MOVE_DISTANCE := 5000.0
+## Z / X change the attack or orbit distance by this much, in meters (see "Distance" above),
+## never closer than MIN_DISTANCE and never past MAX_REACH of the weapon's range.
+const DISTANCE_STEP := 50.0
+const MIN_DISTANCE := 50.0
+const MAX_REACH := 0.9
 
 var _ship: ObjectRef = null
+var _fleet: Array[ObjectRef] = []
+## Ids of the ships whose signals this controller listens to.
+var _hooked := {}
+## Undock was pressed: keep trying until the port lets the ship out.
+var _undock_requested := false
+## Gap the player chose to attack at, in meters; 0 for the weapon's best distance.
+var _attack_distance := 0.0
 var _selected := ObjectRef.new()
 var _hovered := ObjectRef.new()
 ## The last ship the player's ship attacked, by order or by auto-engage.
@@ -126,8 +185,18 @@ func _unhandled_input(event: InputEvent) -> void:
 				loot_selected()
 			KEY_T:
 				loot_all()
+			KEY_D:
+				dock_selected()
+			KEY_F:
+				mine_selected()
+			KEY_Z:
+				change_distance(-DISTANCE_STEP)
+			KEY_X:
+				change_distance(DISTANCE_STEP)
 			KEY_SPACE:
 				stop()
+			_ when key.keycode >= KEY_1 and key.keycode <= KEY_9:
+				use_module(key.keycode - KEY_1)
 
 
 func _process(_delta: float) -> void:
@@ -135,7 +204,9 @@ func _process(_delta: float) -> void:
 	if _selected.is_set() and selected == null:
 		_selected = ObjectRef.new()
 		selection_changed.emit(null)
-	_hovered = ObjectRef.to(pick(get_viewport().get_mouse_position()))
+	# Over a panel or the minimap the cursor points at the UI, not at the space behind it.
+	var over_ui := get_viewport().gui_get_hovered_control() != null
+	_hovered = ObjectRef.new() if over_ui else ObjectRef.to(pick(get_viewport().get_mouse_position()))
 	var current := selected
 	var hover := hovered
 	_place_marker(_marker, current)
@@ -144,6 +215,11 @@ func _process(_delta: float) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if is_docked():
+		if _undock_requested and ship.try_undock():
+			_undock_requested = false
+		return
+	_undock_requested = false
 	if not has_ship():
 		return
 	var own := ship
@@ -166,7 +242,7 @@ func _auto_engage(own: Ship) -> void:
 	if target == null or _engaged.points_to(target):
 		return
 	_engaged = ObjectRef.to(target)
-	var order := AttackOrder.new(target)
+	var order := AttackOrder.new(target, attack_distance())
 	order.note = AUTO_ENGAGE_NOTE
 	own.give_order(order)
 	if selected == null:
@@ -182,9 +258,20 @@ func select(target: Node3D) -> void:
 	selection_changed.emit(target)
 
 
+## The ship is out in space (not docked, not destroyed): it can take orders.
 func has_ship() -> bool:
 	var own := ship
 	return own != null and own.is_in_space()
+
+
+func is_docked() -> bool:
+	var own := ship
+	return own != null and own.is_docked()
+
+
+## The station the ship is docked at, or null.
+func docked_station() -> SpaceBody:
+	return ship.docked_at if is_docked() else null
 
 
 ## The ship the player's ship is ordered to fight (by the player or by auto-engage), or null.
@@ -206,11 +293,43 @@ func orbit_selected() -> void:
 
 func attack_selected() -> void:
 	if has_ship() and can_attack_selected():
-		ship.give_order(AttackOrder.new(selected as Ship))
+		ship.give_order(AttackOrder.new(selected as Ship, attack_distance()))
+
+
+## Gap the ship's attacks keep, in meters: the player's choice, or the weapon's best distance
+## (0 without a ship or a weapon). See "Distance" above.
+func attack_distance() -> float:
+	var own := ship
+	var weapon := own.get_weapon() if own != null else null
+	if weapon == null:
+		return 0.0
+	return _attack_distance if _attack_distance > 0.0 else weapon.best_distance()
+
+
+## Fights (or orbits) `step` meters farther away, closer for a negative step: changes the attack
+## or orbit under way, and the distance of later attacks. See "Distance" above.
+func change_distance(step: float) -> void:
+	if not has_ship():
+		return
+	var order := ship.current_order
+	if order is OrbitOrder:
+		var orbit := order as OrbitOrder
+		orbit.distance = maxf(MIN_DISTANCE, orbit.distance + step)
+		orbit_distance = orbit.distance
+		return
+	var weapon := ship.get_weapon()
+	if weapon == null:
+		return
+	var current := attack_distance()
+	if order is AttackOrder and (order as AttackOrder).distance > 0.0:
+		current = (order as AttackOrder).distance
+	_attack_distance = clampf(current + step, MIN_DISTANCE, maxf(MIN_DISTANCE, weapon.max_range * MAX_REACH))
+	if order is AttackOrder:
+		(order as AttackOrder).distance = _attack_distance
 
 
 func can_attack_selected() -> bool:
-	return selected is Ship
+	return has_ship() and ship.is_armed() and selected is Ship
 
 
 func loot_selected() -> void:
@@ -235,6 +354,105 @@ func can_loot_selected() -> bool:
 	return can_loot() and selected is Wreck
 
 
+func dock_selected() -> void:
+	if can_dock_selected():
+		ship.give_order(DockOrder.new(selected as SpaceBody))
+
+
+func can_dock_selected() -> bool:
+	return has_ship() and selected is Station
+
+
+func mine_selected() -> void:
+	if can_mine_selected():
+		ship.give_order(MineOrder.new(selected, mining_distance))
+
+
+func can_mine_selected() -> bool:
+	return has_ship() and ship.can_mine() and selected is Asteroid
+
+
+## Switches on the ship's module number `index` (0 is the first). A refusal (no such module, not
+## enough energy, cooling down) buzzes. Returns whether the module switched on.
+func use_module(index: int) -> bool:
+	if has_ship() and ship.activate_module(index):
+		return true
+	Sfx.play_ui(self, &"denied")
+	return false
+
+
+## Leaves the station as soon as the port is free (see Ship.try_undock()).
+func undock() -> void:
+	_undock_requested = is_docked()
+
+
+func is_undocking() -> bool:
+	return _undock_requested and is_docked()
+
+
+# --- Station services (only while docked) ------------------------------------------------------
+
+func sell_cargo() -> void:
+	if is_docked():
+		credits += StationServices.sell_cargo(ship)
+
+
+## Repairs as much armor as the credits pay for.
+func repair_ship() -> void:
+	if is_docked():
+		credits -= StationServices.repair(ship, credits)
+
+
+func upgrade_ship() -> void:
+	if is_docked():
+		credits -= StationServices.upgrade(ship, credits)
+
+
+## Buys a module of type `type` (one of StationServices.modules()) and fits it to the ship.
+func buy_module(type: Script) -> void:
+	if is_docked():
+		credits -= StationServices.buy_module(ship, type, credits)
+
+
+## The player's other ships docked at the same station as the ship (ships the player can board).
+func ships_here() -> Array[Ship]:
+	var here: Array[Ship] = []
+	var station := docked_station()
+	if station == null:
+		return here
+	var own := ship
+	for other in fleet:
+		if other != own and other.is_docked() and other.docked_at == station:
+			here.append(other)
+	return here
+
+
+## Moves to `other`, one of ships_here(); the ship left behind stays docked.
+func board(other: Ship) -> void:
+	if other in ships_here():
+		ship = other
+
+
+func _own(owned: Ship) -> void:
+	if owned == null:
+		return
+	for ref in _fleet:
+		if ref.points_to(owned):
+			return
+	_fleet.append(ObjectRef.to(owned))
+
+
+## Listens to `owned`'s signals; the handlers check that it is still the ship the player flies.
+func _hook(owned: Ship) -> void:
+	var id := WorldRegistry.id_of(owned)
+	if id == 0 or _hooked.has(id):
+		return
+	_hooked[id] = true
+	owned.helped_destroy.connect(_on_helped_destroy.bind(id))
+	owned.pilot_ejected.connect(_on_pilot_ejected)
+	owned.docked.connect(_on_ship_docked.bind(id))
+
+
 ## Drops `amount` pieces of `item` from the hold into a container behind the ship.
 func jettison(item: StringName, amount: int) -> void:
 	if has_ship():
@@ -246,13 +464,35 @@ func _give_loot_order(order: LootOrder) -> void:
 	ship.give_order(order)
 
 
-## The player's ship fired at `victim`, which has just been destroyed.
-func _on_helped_destroy(victim: Ship) -> void:
+## The player's ship fired at `victim`, which has just been destroyed: the bounty, if any.
+func _on_helped_destroy(victim: Ship, id: int) -> void:
 	var own := ship
-	if own == null or not own.is_hostile_to(victim):
-		return  # Only enemies count: shooting down a neutral earns nothing.
-	credits += 1
-	credits_earned.emit(1, victim.display_name)
+	if own == null or own.object_id != id:
+		return
+	var bounty := Bounties.reward(own, victim)
+	if bounty > 0:
+		credits += bounty
+		credits_earned.emit(bounty, victim.display_name)
+
+
+## The ship the player flies was destroyed: the pilot flies the escape pod now.
+func _on_pilot_ejected(lost: Ship, pod: Ship) -> void:
+	if _ship != null and _ship.points_to(lost):
+		ship = pod
+		ship_lost.emit(lost.get_title())
+
+
+## A pod that docks is done: the station gives the pilot a new starter ship, docked right there.
+func _on_ship_docked(station: SpaceBody, id: int) -> void:
+	var pod := ship
+	if pod == null or pod.object_id != id or not pod.is_pod or starter_ship == null:
+		return
+	var replacement := starter_ship.instantiate() as Ship
+	var inside: Vector3 = station.get_corridor(pod.dock_corridor)["inner"]
+	replacement.enter_space(pod.get_parent(), Transform3D(Basis.IDENTITY, inside))
+	replacement.dock_instantly(station, pod.dock_corridor)
+	ship = replacement
+	pod.vanish()
 
 
 ## Once the loot order has ended (its drones are back), tells whether the hold got full.
@@ -336,9 +576,15 @@ func _on_double_click(screen_position: Vector2) -> void:
 	var direction := camera.project_ray_normal(screen_position)
 	var plane := Plane(Vector3.UP, ship.global_position.y)
 	var hit: Variant = plane.intersects_ray(origin, direction)
-	if hit == null:
+	if hit != null:
+		fly_to(hit)
+
+
+## Flies toward `point`, but no farther than MAX_MOVE_DISTANCE.
+func fly_to(point: Vector3) -> void:
+	if not has_ship():
 		return
-	var offset: Vector3 = hit - ship.global_position
+	var offset := point - ship.global_position
 	ship.give_order(MoveToOrder.new(ship.global_position + offset.limit_length(MAX_MOVE_DISTANCE)))
 
 
