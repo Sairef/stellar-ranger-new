@@ -45,6 +45,7 @@ you.
   that needs reactions, x4 to x8 for travel and waiting. Count time in game minutes. A death
   caused by your latency rather than by your decisions is not a design finding: say which it was.
   If the brief allows it, the Debug panel can top up credits once after a latency death; note it.
+  The panel starts folded (only the Time buttons); its "Debug [+]" title unfolds the triggers.
 - `game_manage` `suspend` and `resume` pause the whole game when you need to think at a critical
   moment; resume before you send input.
 - After the session, read `logs_read` `source: "game"`: errors there are bugs to report. Don't read

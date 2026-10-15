@@ -28,8 +28,8 @@ extends Node
 ##
 ## Credits (the one galactic currency): the bounty for every destroyed enemy the player's ship
 ## fired at, whoever finished it off (Bounties). Spent and earned at stations: while the ship is
-## docked, the station sells it repairs, modules and an upgrade to the next class and buys its
-## cargo (StationServices).
+## docked, the station sells it repairs, modules, an upgrade to the next class and new ships (they
+## join the fleet, docked there) and buys its cargo (StationServices).
 ##
 ## The player owns several ships (`fleet`, e.g. a combat ship and a mining ship) but flies one:
 ## `ship`. At a station the player can board another own ship docked there; the one left behind
@@ -122,6 +122,9 @@ const MIN_RING_PIXELS := 28.0
 const RING_SCALE := 2.6
 const BRACKETS_SCALE := 3.2
 const MIN_BRACKETS_PIXELS := 36.0
+## A ring or brackets wider than this share of the screen height are not drawn: the object fills
+## the view anyway (a station seen from its port), and the marker would only cover the screen.
+const MAX_MARKER_SHARE := 0.8
 ## Why auto-engage picked its target, shown in the order label.
 const AUTO_ENGAGE_NOTE := "auto: nearest hostile in range"
 ## Longest move order from a double click, in meters.
@@ -209,7 +212,8 @@ func _process(_delta: float) -> void:
 	_hovered = ObjectRef.new() if over_ui else ObjectRef.to(pick(get_viewport().get_mouse_position()))
 	var current := selected
 	var hover := hovered
-	_place_marker(_marker, current)
+	# Seen from its port, the station fills the view: a ring around it would only cover it.
+	_place_marker(_marker, current if current != docked_station() else null)
 	_place_marker(_hover_marker, hover if hover != current else null)
 	_place_marker(_attack_marker, attack_target(), BRACKETS_SCALE, MIN_BRACKETS_PIXELS)
 
@@ -414,6 +418,16 @@ func buy_module(type: Script) -> void:
 		credits -= StationServices.buy_module(ship, type, credits)
 
 
+## Buys a new ship of `scene` (one of StationServices.ships()): it waits docked here, ready to
+## board (ships_here()). Returns it, or null if the ship is not docked or the credits do not pay
+## for it.
+func buy_ship(scene: PackedScene) -> Ship:
+	if not is_docked() or not StationServices.can_buy_ship(scene, credits):
+		return null
+	credits -= StationServices.ship_price(scene)
+	return _deliver(scene, docked_station(), ship.dock_corridor)
+
+
 ## The player's other ships docked at the same station as the ship (ships the player can board).
 func ships_here() -> Array[Ship]:
 	var here: Array[Ship] = []
@@ -487,12 +501,18 @@ func _on_ship_docked(station: SpaceBody, id: int) -> void:
 	var pod := ship
 	if pod == null or pod.object_id != id or not pod.is_pod or starter_ship == null:
 		return
-	var replacement := starter_ship.instantiate() as Ship
-	var inside: Vector3 = station.get_corridor(pod.dock_corridor)["inner"]
-	replacement.enter_space(pod.get_parent(), Transform3D(Basis.IDENTITY, inside))
-	replacement.dock_instantly(station, pod.dock_corridor)
-	ship = replacement
+	ship = _deliver(starter_ship, station, pod.dock_corridor)
 	pod.vanish()
+
+
+## A new ship of `scene` for the player, docked at `station` in port `corridor`, next to `ship`.
+func _deliver(scene: PackedScene, station: SpaceBody, corridor: int) -> Ship:
+	var delivered := scene.instantiate() as Ship
+	var inside: Vector3 = station.get_corridor(corridor)["inner"]
+	delivered.enter_space(ship.get_parent(), Transform3D(Basis.IDENTITY, inside))
+	delivered.dock_instantly(station, corridor)
+	_own(delivered)
+	return delivered
 
 
 ## Once the loot order has ended (its drones are back), tells whether the hold got full.
@@ -589,15 +609,16 @@ func fly_to(point: Vector3) -> void:
 
 
 ## Puts a marker around `target` (or hides it): `span` radii of the object wide, but at least
-## `min_pixels` on screen.
+## `min_pixels` on screen, and none at all if it would be wider than MAX_MARKER_SHARE of the screen.
 func _place_marker(marker: Sprite3D, target: Node3D, span := RING_SCALE,
 		min_pixels := MIN_RING_PIXELS) -> void:
-	marker.visible = target != null
-	if target == null:
+	var on_screen := _projected_radius(target) * span if target != null else 0.0
+	marker.visible = target != null \
+			and on_screen <= get_viewport().get_visible_rect().size.y * MAX_MARKER_SHARE
+	if not marker.visible:
 		return
 	marker.global_position = target.get_global_transform_interpolated().origin
 	var world_size := Autopilot.radius_of(target) * span
-	var on_screen := _projected_radius(target) * span
 	if on_screen > 0.0 and on_screen < min_pixels:
 		world_size *= min_pixels / on_screen
 	marker.pixel_size = world_size / marker.texture.get_width()

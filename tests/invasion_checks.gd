@@ -11,6 +11,7 @@ const SystemScene := preload("res://scenes/systems/home_system.tscn")
 func _ready() -> void:
 	await _small_invasion_full_cycle()
 	await _default_invasion()
+	await _repelled_before_garrison_out()
 	_finish()
 
 
@@ -25,9 +26,10 @@ func _small_invasion_full_cycle() -> void:
 	invasion.small_invaders = 2
 	invasion.medium_invaders = 1
 	invasion.large_invaders = 0
-	invasion.small_defenders = 2
-	invasion.medium_defenders = 1
-	invasion.large_defenders = 1
+	var garrison := Garrison.of(system.get_node("Stations/BastionOutpost"))
+	garrison.small = 2
+	garrison.medium = 1
+	garrison.large = 1
 	invasion.reinforcement_delay = 10.0
 	add_child(system)
 	var security := system.get_node("SystemSecurity") as SystemSecurity
@@ -56,7 +58,7 @@ func _small_invasion_full_cycle() -> void:
 	_check(events.sheltered_miners.size() >= miners_at_start,
 			"miners out in space ran home and docked (%d of %d)" % [events.sheltered_miners.size(), miners_at_start])
 	_check(events.patrol_shots_at_invaders > 0, "patrols fought the invaders (%d shots)" % events.patrol_shots_at_invaders)
-	_check(invasion.defenders_launched == 4, "the garrison was launched (%d)" % invasion.defenders_launched)
+	_check(garrison.ships_launched == 4, "the garrison was launched (%d)" % garrison.ships_launched)
 	_check(not security.alert, "the alert was lifted after the fight")
 	_check(events.wrecks() >= 3, "wrecks with loot are left behind (%d)" % events.wrecks())
 
@@ -95,8 +97,43 @@ func _default_invasion() -> void:
 	await _wait(120.0)
 	_check(invasion.invaders_arrived == invasion.fleet_size(),
 			"the whole fleet came through (%d)" % invasion.invaders_arrived)
-	_check(invasion.defenders_launched == invasion.garrison_size(),
-			"the whole garrison was launched (%d)" % invasion.defenders_launched)
+	var garrison := invasion.garrison()
+	_check(garrison.ships_launched == garrison.strength(),
+			"the whole garrison was launched (%d)" % garrison.ships_launched)
+	system.queue_free()
+	await get_tree().physics_frame
+
+
+## An invasion repelled before the whole garrison got out of the ports: the ones still docked
+## stay home (they would only fly out and turn back).
+func _repelled_before_garrison_out() -> void:
+	print("
+== Repelled before the garrison is out: the rest stay docked")
+	var system := SystemScene.instantiate() as Node3D
+	(system.get_node("PirateRaids") as PirateRaids).auto = false
+	var invasion := system.get_node("Invasion") as Invasion
+	invasion.small_invaders = 1
+	invasion.medium_invaders = 0
+	invasion.large_invaders = 0
+	invasion.warmup_time = 0.5
+	invasion.reinforcement_delay = 0.0
+	add_child(system)
+	var garrison := invasion.garrison()
+	var at_end := {"launched": -1}
+	invasion.finished.connect(func() -> void: at_end.launched = garrison.ships_launched)
+	invasion.start(system.get_node("Gates/WestGate") as Gate)
+	await _simulate(10.0, func() -> bool: return invasion.invaders_arrived == 1)
+	# Shoot the invader down as soon as it is out.
+	await _simulate(3.0, func() -> bool:
+		for node in get_tree().get_nodes_in_group(Autopilot.SHIP_GROUP):
+			if (node as Ship).faction == Factions.INVADER:
+				(node as Ship).take_hit(5000.0, null)
+		return at_end.launched >= 0)
+	_check(at_end.launched >= 0 and at_end.launched < garrison.strength(),
+			"repelled while the garrison was leaving (%d of %d out)" % [at_end.launched, garrison.strength()])
+	await _wait(20.0)
+	_check(garrison.ships_launched == at_end.launched,
+			"nobody undocked after the all clear (%d then, %d now)" % [at_end.launched, garrison.ships_launched])
 	system.queue_free()
 	await get_tree().physics_frame
 

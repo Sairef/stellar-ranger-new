@@ -4,6 +4,8 @@ All docs and comments should be English only.
 
 Single-player 3D space sandbox in Godot 4.7 (GDScript, Jolt physics). The game concept,
 design pillars and milestone plan are in `docs/concept.md` — read it before design work.
+What playtests showed and what was decided: `docs/playtest_notes.md` (full reports verbatim in
+`docs/playtests/`).
 
 Current stage: playtests of how mechanics feel. Build the mechanic properly, but stub the content
 with the dumbest placeholders ("Loot 1", size 1): no item variety, drop tables, multiple
@@ -42,8 +44,11 @@ feature first.
   dropped cargo containers: things to loot); `AsteroidField`; `SystemSecurity` (hostiles around
   and the invasion alert NPCs react to), `Invasion` (the event, started by a debug button),
   `PirateRaids` (pirates raiding the asteroid field on a timer; `create_pirate()` is the one place
-  pirates are made), `SalvageService` (the scavenger), `StationServices` (what a docked ship can
-  buy and sell: repairs, modules, upgrades, cargo), `Bounties` (credits for destroyed hostiles);
+  pirates are made; the defense station answers a raid with a squad after a delay),
+  `Garrison` (a station's military ships, a child node of the station: launched against invasions
+  and raids; the one place defenders are made), `SalvageService` (the scavenger),
+  `StationServices` (what a docked ship can buy and sell: repairs, modules, upgrades, a mining
+  ship, cargo), `Bounties` (credits for destroyed hostiles);
   labels, sky and gate shaders. `src/player/` — input and camera; `PlayerController`
   also keeps the player's credits and fleet (the ship flown, other owned ships, boarding).
   `src/ui/` — HUD, the cargo window, the station window (while docked), the hostile list, the
@@ -72,7 +77,9 @@ combat (hit chance by distance, bounties, modules, sounds too) in `res://tests/c
 loot orders, the scavenger) in `res://tests/loot_checks.tscn`, stations and the player's loop
 (docking, repairs, modules, upgrades, selling, boarding, mining, the escape pod, shield recharge)
 in `res://tests/station_checks.tscn`, the invasion in `res://tests/invasion_checks.tscn`, pirate
-raids in `res://tests/raid_checks.tscn`, the game as it really boots in
+raids and the squads sent against them in `res://tests/raid_checks.tscn`, the HUD layout (panels
+that hide, the banner keeping clear of them, the docked station's ring) in
+`res://tests/hud_checks.tscn`, the game as it really boots in
 `res://tests/startup_checks.tscn` (its main scene contains the home system: references set by a
 scene resolve at boot), and `res://tests/chaos_checks.tscn` removes random world objects at random
 moments while the home system runs (same command). Suites extend `tests/support/check_suite.gd`

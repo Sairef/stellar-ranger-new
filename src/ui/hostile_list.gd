@@ -3,22 +3,33 @@ extends PanelContainer
 
 ## Every hostile ship in the system, nearest first, in a scrolling table (no limit: the one worth
 ## attacking may be the ninth): name, class, distance, hit chances right now (the player's ship
-## on it / it on the player's ship, see Hud.odds_text()), shield / armor and whom it attacks
-## ("YOU" in red when it is the player's ship). The ship the player's ship attacks is red. Click a row to
+## on it / it on the player's ship, see Hud.odds_text()), the same at the distance the player's
+## ship would fight it at (PlayerController.attack_distance(): what closing in or keeping away
+## would change), shield / armor and whom it attacks ("YOU" in red when it is the player's ship).
+## The ship the player's ship attacks is red. Click a row to
 ## select that ship, double-click it to attack. Picking one ship out of a crowded fight in 3D is
 ## hard; the table does not care how crowded the fight is.
+## Hidden while docked (the station window is there) and while the tactical map is open (it gets
+## the whole screen, and its icons are clicked directly).
 
 ## Seconds between refreshes of the table.
 const REFRESH_INTERVAL := 0.25
-const TITLES: Array[String] = ["Ship", "Class", "Distance", "Hit %", "S / A", "Attacking"]
-const WIDTHS: Array[int] = [0, 70, 76, 76, 70, 0]
-## Columns tests and tools read.
+const TITLES: Array[String] = ["Ship", "Class", "Distance", "Hit %", "", "S / A", "Attacking"]
+const WIDTHS: Array[int] = [0, 60, 70, 70, 76, 64, 0]
+## Columns (tests and tools read them too).
+const COLUMN_NAME := 0
+const COLUMN_CLASS := 1
+const COLUMN_DISTANCE := 2
 const COLUMN_HIT := 3
-const COLUMN_ATTACKING := 5
+const COLUMN_FORECAST := 4
+const COLUMN_HEALTH := 5
+const COLUMN_ATTACKING := 6
 const SIZE := Vector2(560, 250)
 const ATTACK_COLOR := Color(1.0, 0.35, 0.3)
 
 var controller: PlayerController
+## The tactical map: the list hides while it is open.
+var map: TacticalMap
 
 var _title: Label
 var _tree: Tree
@@ -59,6 +70,10 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	visible = controller != null and not controller.is_docked() and (map == null or not map.is_open)
+	if not visible:
+		_refresh_in = 0.0  # Up to date as soon as it shows again.
+		return
 	_refresh_in -= delta
 	if _refresh_in <= 0.0:
 		_refresh_in = REFRESH_INTERVAL
@@ -89,6 +104,8 @@ func rows() -> Array[TreeItem]:
 func refresh() -> void:
 	var ships := hostiles()
 	_title.text = "Hostiles (%d)" % ships.size()
+	var own_gap := controller.attack_distance()
+	_tree.set_column_title(COLUMN_FORECAST, "At %.0f m" % own_gap if own_gap > 0.0 else "")
 	var root := _tree.get_root()
 	var items := root.get_children()
 	while items.size() < ships.size():
@@ -102,29 +119,33 @@ func refresh() -> void:
 	_syncing = true
 	_tree.deselect_all()
 	for i in ships.size():
-		_fill(items[i], ships[i], own, ships[i] == attacked)
+		_fill(items[i], ships[i], own, ships[i] == attacked, own_gap)
 		if ships[i] == selected:
 			items[i].select(0)
 	_syncing = false
 
 
-func _fill(item: TreeItem, ship: Ship, own: Ship, attacked: bool) -> void:
-	item.set_metadata(0, WorldRegistry.id_of(ship))
-	item.set_text(0, ship.display_name)
-	item.set_text(1, ShipClass.name_of(ship.ship_class) if ship.ship_class != ShipClass.Size.CUSTOM else "")
+## `own_gap`: the distance the player's ship would fight at (0 without a weapon).
+func _fill(item: TreeItem, ship: Ship, own: Ship, attacked: bool, own_gap: float) -> void:
+	item.set_metadata(COLUMN_NAME, WorldRegistry.id_of(ship))
+	item.set_text(COLUMN_NAME, ship.display_name)
+	item.set_text(COLUMN_CLASS,
+			ShipClass.name_of(ship.ship_class) if ship.ship_class != ShipClass.Size.CUSTOM else "")
 	var gap := ""
 	if own != null:
 		gap = "%.0f m" % (own.global_position.distance_to(ship.global_position) - own.radius - ship.radius)
-	item.set_text(2, gap)
-	item.set_text_alignment(2, HORIZONTAL_ALIGNMENT_RIGHT)
+	item.set_text(COLUMN_DISTANCE, gap)
+	item.set_text_alignment(COLUMN_DISTANCE, HORIZONTAL_ALIGNMENT_RIGHT)
 	item.set_text(COLUMN_HIT, _hit_text(own, ship))
 	item.set_text_alignment(COLUMN_HIT, HORIZONTAL_ALIGNMENT_CENTER)
-	item.set_text(4, "%d / %d" % [ceili(ship.shield), ceili(ship.armor)])
+	item.set_text(COLUMN_FORECAST, _forecast_text(own, ship, own_gap))
+	item.set_text_alignment(COLUMN_FORECAST, HORIZONTAL_ALIGNMENT_CENTER)
+	item.set_text(COLUMN_HEALTH, "%d / %d" % [ceili(ship.shield), ceili(ship.armor)])
 	var target: Ship = ship.current_order.get_attack_target() if ship.current_order != null else null
 	var at_you := target != null and target == own
 	item.set_text(COLUMN_ATTACKING, "YOU" if at_you else Autopilot.name_of(target) if target != null else "")
 	_paint(item, COLUMN_ATTACKING, at_you)
-	_paint(item, 0, attacked)
+	_paint(item, COLUMN_NAME, attacked)
 
 
 ## "85 / 21": the player's ship's hit chance on `ship` / its hit chance on the player's ship, in
@@ -135,10 +156,25 @@ func _hit_text(own: Ship, ship: Ship) -> String:
 	return "%s / %s" % [_percent(own, ship), _percent(ship, own)]
 
 
+## The same at `gap`, the distance the player's ship would fight `ship` at; empty if it has no
+## weapon (`gap` 0).
+func _forecast_text(own: Ship, ship: Ship, gap: float) -> String:
+	if own == null or gap <= 0.0:
+		return ""
+	return "%s / %s" % [_percent_at(own, ship, gap), _percent_at(ship, own, gap)]
+
+
 func _percent(shooter: Ship, target: Ship) -> String:
 	if not shooter.is_armed() or not shooter.get_weapon().in_range(target):
 		return "-"
 	return "%d" % roundi(shooter.get_weapon().hit_chance_against(target) * 100.0)
+
+
+func _percent_at(shooter: Ship, target: Ship, gap: float) -> String:
+	if not shooter.is_armed():
+		return "-"
+	var chance := shooter.get_weapon().hit_chance_at(gap, target)
+	return "%d" % roundi(chance * 100.0) if chance > 0.0 else "-"
 
 
 func _paint(item: TreeItem, column: int, red: bool) -> void:
@@ -149,7 +185,7 @@ func _paint(item: TreeItem, column: int, red: bool) -> void:
 
 
 func _row_ship(item: TreeItem) -> Ship:
-	return WorldRegistry.find(item.get_metadata(0)) as Ship if item != null else null
+	return WorldRegistry.find(item.get_metadata(COLUMN_NAME)) as Ship if item != null else null
 
 
 func _on_row_selected() -> void:

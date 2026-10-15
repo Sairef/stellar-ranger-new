@@ -22,6 +22,8 @@ const HOVER_OFFSET := Vector2(18, 10)
 ## Distance of the alert banner's bottom edge from the bottom of the screen (above the controls
 ## help line, where it covers neither the side panels nor the ship in the middle), in pixels.
 const BANNER_BOTTOM := 48.0
+## Narrowest the banner may get between the panels before it moves above the hostile list.
+const BANNER_MIN_WIDTH := 280.0
 const ALERT_COLOR := Color(1.0, 0.45, 0.35)
 const CALM_COLOR := Color(0.6, 1.0, 0.6)
 ## Seconds the last credits reward stays on screen.
@@ -120,6 +122,7 @@ func _ready() -> void:
 
 	_hostile_list = HostileList.new()
 	_hostile_list.controller = controller
+	_hostile_list.map = _map
 	add_child(_hostile_list)
 	_hostile_list.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 12)
 	_hostile_list.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -151,20 +154,42 @@ func _ready() -> void:
 	_banner.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_banner.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	_banner.offset_bottom = -BANNER_BOTTOM
-	# Centered in the space between the hostile list and the minimap, so it covers neither.
-	_banner.offset_left = _hostile_list.offset_right + MARGIN
 	_layout()
 	get_viewport().size_changed.connect(_layout)
 
 
 ## Places what depends on the screen size: the minimap in the bottom right corner above the
-## controls help line, the station window left of it, the banner between them and the hostile list.
+## controls help line, the station window left of it (the banner keeps clear of both, see
+## _place_banner()).
 func _layout() -> void:
 	var side := clampf(get_viewport().get_visible_rect().size.y * MINIMAP_SHARE, MINIMAP_MIN, MINIMAP_MAX)
 	_minimap.custom_minimum_size = Vector2(side, side)
 	_place_bottom_right(_minimap, 0.0)
 	_place_bottom_right(_station_window, side + MARGIN)
-	_banner.offset_right = -(side + 2.0 * MARGIN)
+
+
+## Centers the banner in the room between the panels along the bottom: the hostile list on the
+## left, the station window (while docked) and the minimap on the right, so it covers none of
+## their buttons. If that room is narrower than BANNER_MIN_WIDTH (a squarer window, where the
+## minimap grows), the banner goes above the hostile list instead. Every frame: which panels show
+## changes (docked, the map open).
+func _place_banner() -> void:
+	var screen := get_viewport().get_visible_rect().size
+	var right := screen.x - MARGIN
+	for panel: Control in [_station_window, _minimap]:
+		if panel.visible:
+			right = minf(right, panel.get_global_rect().position.x - MARGIN)
+	var left := MARGIN
+	var bottom := BANNER_BOTTOM
+	if _hostile_list.visible:
+		var list := _hostile_list.get_global_rect()
+		left = list.end.x + MARGIN
+		if right - left < BANNER_MIN_WIDTH:
+			left = MARGIN
+			bottom = screen.y - list.position.y + MARGIN
+	_banner.offset_left = left
+	_banner.offset_right = right - screen.x
+	_banner.offset_bottom = -bottom
 
 
 ## Anchors `panel` to the bottom right corner, above the help line, `shift` pixels to the left.
@@ -203,6 +228,22 @@ static func odds_text(own: Ship, other: Ship) -> String:
 	return "   ".join(parts)
 
 
+## "At 100 m: you 85%, it 31%": the same if the ships were `gap` meters apart (the distance
+## `own` would fight at), so the player sees what closing in or keeping away would change.
+## Empty unless `own` is armed.
+static func forecast_text(own: Ship, other: Ship, gap: float) -> String:
+	if not own.is_armed() or gap <= 0.0:
+		return ""
+	var text := "At %.0f m: you %s" % [gap, _chance_text(own.get_weapon().hit_chance_at(gap, other))]
+	if other.is_armed() and other.is_hostile_to(own):
+		text += ", it %s" % _chance_text(other.get_weapon().hit_chance_at(gap, own))
+	return text
+
+
+static func _chance_text(chance: float) -> String:
+	return "%d%%" % roundi(chance * 100.0) if chance > 0.0 else "out of range"
+
+
 func _on_credits_earned(amount: int, enemy: String) -> void:
 	_reward_note = "+%d for %s" % [amount, enemy]
 	_reward_note_time = REWARD_NOTE_TIME
@@ -217,6 +258,7 @@ func _on_ship_lost(title: String) -> void:
 
 func _process(delta: float) -> void:
 	_update_banner()
+	_place_banner()
 	_update_modules()
 	_reward_note_time -= delta
 	_loss_note_time -= delta
@@ -270,6 +312,9 @@ func _process(delta: float) -> void:
 			lines.append("   " + activity)
 			if has_ship and (ship.is_hostile_to(other) or controller.attack_target() == other):
 				var odds := odds_text(ship, other)
+				var forecast := forecast_text(ship, other, controller.attack_distance())
+				if not forecast.is_empty():
+					odds += "   (%s)" % forecast
 				if not odds.is_empty():
 					lines.append("   " + odds)
 		elif target is Wreck:
@@ -278,6 +323,8 @@ func _process(delta: float) -> void:
 				lines.append("   Contains: %s" % wreck.cargo.describe())
 			else:
 				lines.append("   Contents unknown: come within %.0f m" % Wreck.INSPECT_RANGE)
+		elif target is Gate:
+			lines.append("   Jumps to other systems: not in the game yet")
 	else:
 		lines.append("Target: none (click an object)")
 	_status.text = "\n".join(lines)

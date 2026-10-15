@@ -1,0 +1,2 @@
+- [Garrison decision](decision_garrison.md) — 2026-10-14: military ships belong to a Garrison on the station; Invasion and raid response both launch from it
+- [Recurring findings](recurring_findings.md) — check first: stale function docs, event cleanup lost on finish, magic UI column indices

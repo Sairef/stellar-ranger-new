@@ -47,6 +47,15 @@ static func name_of(size: Size) -> String:
 	return NAMES[size]
 
 
+## A fleet's classes: `small` small ships first, then `medium` medium and `large` large ones.
+static func sizes(small: int, medium: int, large: int) -> Array[Size]:
+	var result: Array[Size] = []
+	for count_and_size: Array in [[small, Size.SMALL], [medium, Size.MEDIUM], [large, Size.LARGE]]:
+		for i in count_and_size[0]:
+			result.append(count_and_size[1])
+	return result
+
+
 ## The next class up (what an upgrade at a station makes of a ship), or CUSTOM if there is none.
 static func next(size: Size) -> Size:
 	match size:

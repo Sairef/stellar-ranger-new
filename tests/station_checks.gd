@@ -2,7 +2,7 @@ extends "res://tests/support/check_suite.gd"
 
 ## Headless checks for the player's loop around stations: the shield recharging by itself,
 ## docking (D) and undocking, what a station sells and buys (StationServices: cargo, repairs,
-## modules, an upgrade to the next class), NPC ships repaired for free, boarding another own ship,
+## modules, an upgrade to the next class, a new mining ship), NPC ships repaired for free, boarding another own ship,
 ## mining with a mining ship (F), and the escape pod that gets a new ship at a station (the lost
 ## ship's class and modules are gone).
 ## Run from the project folder (exit code 0 when everything passes):
@@ -21,6 +21,7 @@ func _ready() -> void:
 	await _buying_modules()
 	await _npc_free_repairs()
 	await _boarding()
+	await _buying_a_ship()
 	await _mining()
 	await _escape_pod()
 	_finish()
@@ -178,6 +179,39 @@ func _boarding() -> void:
 	controller.board(miner)
 	_check(controller.ship == miner and combat.is_docked() and controller.ships_here() == [combat],
 			"boarded the miner; the combat ship stays docked")
+	await _end()
+
+
+## A pilot who lost the mining ship buys a new one: it waits docked at the same station.
+func _buying_a_ship() -> void:
+	_begin("Buying a mining ship")
+	var station := _spawn_station()
+	var combat := _spawn(PlayerShipScene, Vector3(0, 0, 700))
+	var controller := _spawn_controller(combat)
+	await get_tree().physics_frame
+	var scene := StationServices.MINING_SHIP
+	var price := StationServices.ship_price(scene)
+	_check(scene in StationServices.ships() and price > 0, "stations sell a mining ship (%d cr)" % price)
+	controller.credits = price
+	_check(controller.buy_ship(scene) == null and controller.credits == price, "not out in space")
+	combat.dock_instantly(station, 1)
+	controller.credits = price - 1
+	_check(controller.buy_ship(scene) == null and controller.credits == price - 1, "not without the credits")
+	controller.credits = price + 5
+	var bought := controller.buy_ship(scene)
+	_check(bought != null and controller.credits == 5, "bought for %d cr (%d left)" % [price, controller.credits])
+	if bought == null:
+		await _end()
+		return
+	_check(bought.can_mine() and bought.ship_class == ShipClass.Size.SMALL and bought.faction == Factions.PLAYER,
+			"a small mining ship of the player's (%s)" % bought.get_title())
+	_check(bought.docked_at == station and controller.ships_here() == [bought] and bought in controller.fleet,
+			"docked at the same station, in the fleet, ready to board")
+	_check(controller.ship == combat, "the pilot still flies the combat ship")
+	controller.board(bought)
+	controller.undock()
+	var time := await _simulate(30.0, func() -> bool: return bought.is_in_space())
+	_check(time > 0.0, "boarded, it undocks (%.1f s)" % time)
 	await _end()
 
 

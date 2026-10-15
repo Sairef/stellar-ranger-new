@@ -193,6 +193,11 @@ func _hit_chance_by_distance_and_size() -> void:
 	var expected := "You hit %d%%   It hits you %d%%" % [roundi(mine.hit_chance_against(large) * 100.0),
 			roundi(theirs.hit_chance_against(small) * 100.0)]
 	_check(odds == expected, "the HUD shows the numbers the weapons fire with (%s)" % odds)
+	var forecast := Hud.forecast_text(small, large, 100.0)
+	at_gap.call(100.0)
+	expected = "At 100 m: you %d%%, it %d%%" % [roundi(mine.hit_chance_against(large) * 100.0),
+			roundi(theirs.hit_chance_against(small) * 100.0)]
+	_check(forecast == expected, "the forecast at 100 m (taken at 150 m) is what they hit there (%s)" % forecast)
 	await _end()
 
 

@@ -2,8 +2,9 @@ extends "res://tests/support/check_suite.gd"
 
 ## Chaos test for references to world objects (see WorldRegistry and ObjectRef).
 ##
-## The home system runs with its traffic, miners and patrols, plus a few pirates, an invasion
-## (started at INVASION_TIME), a pirate raid (started at RAID_TIME) and the scavenger (from SCAVENGER_TIME on, wrecks are aged every
+## The home system runs with its traffic, miners and patrols, plus a few pirates, a pirate raid
+## (started at RAID_TIME; the squad sent against it is out when the invasion comes), an invasion
+## (started at INVASION_TIME) and the scavenger (from SCAVENGER_TIME on, wrecks are aged every
 ## AGING_EVERY seconds until it comes: at any given moment there may be none), while random
 ## world objects vanish at random moments: ships destroyed or removed outright (docked ones and
 ## the player's ship included), drones on the way, field rocks (maybe the one a miner is
@@ -27,8 +28,10 @@ const REMOVE_EVERY := Vector2(0.5, 3.0)
 ## Seconds between player commands.
 const COMMAND_EVERY := 2.0
 const GATE_REMOVAL_TIME := 90.0
+const RAID_TIME := 5.0
+## Seconds from the raid to the squad sent against it.
+const RESPONSE_DELAY := 10.0
 const INVASION_TIME := 20.0
-const RAID_TIME := 40.0
 const SCAVENGER_TIME := 100.0
 const AGING_EVERY := 10.0
 ## The player's ship rarely lives long enough to fly to a station, so every so often it is put
@@ -66,6 +69,8 @@ func _ready() -> void:
 	var salvage := _system.get_node("SalvageService") as SalvageService
 	var raids := _system.get_node("PirateRaids") as PirateRaids
 	raids.auto = false
+	raids.response_delay = RESPONSE_DELAY
+	raids.event_seed = 7
 	var raiders_seen := 0
 	var next_aging := SCAVENGER_TIME
 	for i in PIRATES:
@@ -131,6 +136,7 @@ func _ready() -> void:
 	_check(_station_uses > 0, "the player used stations (%d commands, %d ships boarded)" % [_station_uses, _boarded])
 	_check(invasion.invaders_arrived > 0, "the invasion happened (%d invaders came)" % invasion.invaders_arrived)
 	_check(raiders_seen > 0, "the pirate raid happened (up to %d raiders at once)" % raiders_seen)
+	_check(raids.squads_sent > 0, "a squad was sent against it (%d)" % raids.squads_sent)
 	_check(salvage.scavengers_launched > 0, "the scavenger went out (%d)" % salvage.scavengers_launched)
 	_check(late_ships > 0, "the system keeps going (up to %d ships in space in the last %.0f s)"
 			% [late_ships, ALIVE_WINDOW])

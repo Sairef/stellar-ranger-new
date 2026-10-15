@@ -9,8 +9,8 @@ extends Node
 ##    so traders and miners already run for cover and patrols head for the gate.
 ## 2. Arrival: the fleet comes out of the membrane one ship at a time, side by side in lanes,
 ##    small ships first, then medium, then large (see ShipClass).
-## 3. `reinforcement_delay` seconds after the start the defense station launches its garrison
-##    (also of all three classes).
+## 3. `reinforcement_delay` seconds after the start the defense station launches its whole
+##    garrison (Garrison, also of all three classes).
 ## 4. Over when the last invader is gone. Invaders hunt anything within detection range and
 ##    otherwise besiege the defense station; the garrison docks back home after the fight.
 
@@ -20,7 +20,6 @@ enum Phase { IDLE, WARMUP, ARRIVING, FIGHTING }
 
 const ShipScene := preload("res://src/ships/ship.tscn")
 const INVADER_COLOR := Color(0.75, 0.25, 0.95)
-const DEFENDER_COLOR := Color(0.45, 0.9, 0.45)
 ## Free space needed around a lane before the next invader comes out there, in meters.
 const LANE_CLEARANCE := 25.0
 ## Lanes stay within this fraction of the gate opening.
@@ -45,17 +44,12 @@ const EMERGE_SPEED := 40.0
 @export var invader_detection := 6000.0
 
 @export_group("Defense")
-## Ships the defense station keeps docked and launches when invaded.
-@export var small_defenders := 5
-@export var medium_defenders := 2
-@export var large_defenders := 1
+## Seconds from the start until the defense station launches its garrison.
 @export var reinforcement_delay := 15.0
 
 var phase := Phase.IDLE
 ## Invaders that came through the gate in the current (or last) invasion.
 var invaders_arrived := 0
-## Garrison ships launched in the current (or last) invasion.
-var defenders_launched := 0
 
 ## The gate of the current (or last) invasion, or null.
 var gate: Gate:
@@ -66,12 +60,13 @@ var _gate := ObjectRef.new()
 var _timer := 0.0
 var _queue: Array[Dictionary] = []
 var _invaders: Array[ObjectRef] = []
-var _garrison: Array[ObjectRef] = []
-var _to_launch: Array[ObjectRef] = []
+## Seconds until the garrison launches; below 0 once it has (or with no invasion).
 var _launch_in := -1.0
+## Garrison ships launched from the docks in this invasion (the ones still docked when it is
+## over stay home).
+var _launched: Array[ObjectRef] = []
 var _rng := RandomNumberGenerator.new()
 var _button: Button
-var _serial := 0
 
 
 func _ready() -> void:
@@ -92,9 +87,9 @@ func fleet_size() -> int:
 	return small_invaders + medium_invaders + large_invaders
 
 
-## Ships in the full garrison.
-func garrison_size() -> int:
-	return small_defenders + medium_defenders + large_defenders
+## The defense station's garrison, or null.
+func garrison() -> Garrison:
+	return Garrison.of(get_node_or_null(defense_station))
 
 
 ## Invaders still out in space.
@@ -119,10 +114,8 @@ func start(through: Gate = null) -> void:
 	phase = Phase.WARMUP
 	_timer = warmup_time
 	invaders_arrived = 0
-	defenders_launched = 0
 	_invaders.clear()
 	_queue = _fleet()
-	_prepare_garrison()
 	_launch_in = reinforcement_delay
 	var security := SystemSecurity.of(self)
 	if security != null:
@@ -162,8 +155,11 @@ func _physics_process(delta: float) -> void:
 
 func _finish() -> void:
 	phase = Phase.IDLE
-	_to_launch.clear()
 	_launch_in = -1.0
+	var defense := garrison()
+	if defense != null:
+		defense.cancel(_launched)
+	_launched.clear()
 	if gate != null:
 		gate.active = false
 	_announce("The invasion has been repelled")
@@ -174,19 +170,9 @@ func _finish() -> void:
 ## The ships to bring in, in order: small ones first, then medium, then large.
 func _fleet() -> Array[Dictionary]:
 	var fleet: Array[Dictionary] = []
-	for size: ShipClass.Size in _classes(small_invaders, medium_invaders, large_invaders):
+	for size in ShipClass.sizes(small_invaders, medium_invaders, large_invaders):
 		fleet.append({"name": "Invader %d" % (fleet.size() + 1), "class": size})
 	return fleet
-
-
-## Ship classes, `small` small ones first, then `medium` medium and `large` large ones.
-static func _classes(small: int, medium: int, large: int) -> Array[ShipClass.Size]:
-	var result: Array[ShipClass.Size] = []
-	for count_and_size: Array in [[small, ShipClass.Size.SMALL], [medium, ShipClass.Size.MEDIUM],
-			[large, ShipClass.Size.LARGE]]:
-		for i in count_and_size[0]:
-			result.append(count_and_size[1])
-	return result
 
 
 ## Brings one invader out of the gate in a random free lane. Returns false if the lane picked
@@ -230,56 +216,17 @@ func _is_clear(point: Vector3, radius: float) -> bool:
 	return true
 
 
-## Tops the station's garrison up to its full strength in every class (docked, hidden) and
-## schedules them all for launch.
-func _prepare_garrison() -> void:
-	_to_launch.clear()
-	var station := get_node_or_null(defense_station) as SpaceBody
-	if station == null:
-		return
-	var missing := _classes(small_defenders, medium_defenders, large_defenders)
-	_garrison = _garrison.filter(func(ref: ObjectRef) -> bool: return ref.resolve() != null)
-	for ref in _garrison:
-		missing.erase((ref.resolve() as Ship).ship_class)
-	for size in missing:
-		_serial += 1
-		var ship := ShipScene.instantiate() as Ship
-		ship.name = "Defender%d" % _serial
-		ship.display_name = "Defender %d" % _serial
-		ship.hull_color = DEFENDER_COLOR
-		ship.ship_class = size
-		var routine := CombatRoutine.new()
-		routine.detection_range = invader_detection
-		routine.home = station
-		ship.add_child(routine)
-		var corridor := _garrison.size() % station.get_corridor_count()
-		ship.enter_space(get_node(ships_root),
-				Transform3D(Basis.IDENTITY, station.get_corridor(corridor)["inner"]))
-		ship.dock_instantly(station, corridor)
-		_garrison.append(ObjectRef.to(ship))
-	for ref in _garrison:
-		var ship := ref.resolve() as Ship
-		if ship != null and ship.is_docked():
-			_to_launch.append(ref)
-
-
-## Waits out the delay, then keeps undocking the garrison until all are out: ships docked at
-## the same port leave one after another, as the corridor frees up.
+## Waits out the delay, then launches the whole garrison.
 func _update_reinforcements(delta: float) -> void:
-	if _to_launch.is_empty():
+	if _launch_in < 0.0:
 		return
-	if _launch_in > 0.0:
-		_launch_in -= delta
-		if _launch_in <= 0.0:
-			_announce("%s launches its garrison" % Autopilot.name_of(get_node_or_null(defense_station)))
+	_launch_in -= delta
+	if _launch_in >= 0.0:
 		return
-	for ref in _to_launch.duplicate():
-		var ship := ref.resolve() as Ship
-		if ship == null or not ship.is_docked():
-			_to_launch.erase(ref)
-		elif ship.try_undock():
-			_to_launch.erase(ref)
-			defenders_launched += 1
+	var defense := garrison()
+	if defense != null:
+		_launched = defense.launch_all()
+		_announce("%s launches its garrison" % Autopilot.name_of(get_node_or_null(defense_station)))
 
 
 func _random_gate() -> Gate:

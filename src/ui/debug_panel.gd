@@ -4,8 +4,15 @@ extends CanvasLayer
 ## Debug tools in the top right corner: simulation speed, statistics and manual triggers.
 ## Scenes add their own trigger buttons with add_action() (e.g. "Spawn pirate"; later
 ## "Start invasion"), so nothing like that ever starts on its own.
+## The title button folds the statistics and the triggers away (`collapsed`), leaving the speed:
+## the panel is not part of the game, and unfolded it covers a corner of the tactical map.
 
 @export var spawner: TrafficSpawner
+## Only the title and the speed buttons show; the title button unfolds the rest.
+@export var collapsed := true:
+	set(value):
+		collapsed = value
+		_update_collapsed()
 
 ## Below x1 for playtests driven by an agent: its reactions are far slower than a human's.
 const TIME_SCALES: Array[float] = [0.25, 0.5, 1.0, 2.0, 4.0, 8.0]
@@ -19,6 +26,7 @@ const ROLES := {
 	"Scavengers": ScavengerRoutine.GROUP,
 }
 
+var _title: Button
 var _stats: Label
 var _actions: VBoxContainer
 
@@ -33,10 +41,12 @@ func _ready() -> void:
 	var column := VBoxContainer.new()
 	margin.add_child(column)
 
-	var title := Label.new()
-	title.text = "Debug"
-	title.modulate = Color(1, 1, 1, 0.6)
-	column.add_child(title)
+	_title = _make_button("")
+	_title.flat = true
+	_title.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_title.modulate = Color(1, 1, 1, 0.6)
+	_title.pressed.connect(func() -> void: collapsed = not collapsed)
+	column.add_child(_title)
 
 	var speed_row := HBoxContainer.new()
 	column.add_child(speed_row)
@@ -56,6 +66,7 @@ func _ready() -> void:
 	column.add_child(_stats)
 	_actions = VBoxContainer.new()
 	column.add_child(_actions)
+	_update_collapsed()
 
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
@@ -69,7 +80,17 @@ func add_action(text: String, action: Callable) -> Button:
 	return button
 
 
+func _update_collapsed() -> void:
+	if _title == null:
+		return
+	_title.text = "Debug [+]" if collapsed else "Debug [-]"
+	_stats.visible = not collapsed
+	_actions.visible = not collapsed
+
+
 func _process(_delta: float) -> void:
+	if collapsed:
+		return
 	var tree := get_tree()
 	var docked := 0
 	for node in tree.get_nodes_in_group(Ship.ALL_SHIPS_GROUP):

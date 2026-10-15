@@ -12,9 +12,11 @@ extends Node
 ## does not flip-flop between targets at similar distances.
 ## With nobody to fight it docks at `home` if it has one (station garrisons), otherwise circles
 ## `assault_target` if it has one (invaders besieging a station), otherwise waits.
-## With a territory (`territory_radius` around `territory_center`: raiders on the asteroid field)
-## it hunts only ships inside it, gives up a chase that leaves it, and with nobody to fight roams
-## it, flying from one random spot in it to the next.
+## With a territory (`territory_radius` around `territory_center`: raiders on the asteroid field,
+## a squad sent against them) it hunts only ships inside it, but every one of them however far
+## (it was sent there: the territory replaces `detection_range`), gives up a chase that leaves
+## it, and with nobody to fight roams it, flying from one random spot in it to the next (or docks
+## at `home`, if it has one).
 ## leave_through() sends it out of the system: it stops hunting and jumps out through a gate.
 ## Gives orders through the same API the player uses.
 
@@ -127,7 +129,8 @@ func _reconsider(current: Ship) -> void:
 		_attack(best)
 
 
-## The hostile ship within detection range with the lowest score, or null.
+## The hostile ship within detection range (anywhere in the territory, if it has one) with the
+## lowest score, or null.
 func _best_target(attackers: Dictionary[Ship, int]) -> Ship:
 	var best: Ship = null
 	var best_score := INF
@@ -135,8 +138,8 @@ func _best_target(attackers: Dictionary[Ship, int]) -> Ship:
 		var other := node as Ship
 		if other == _ship or other.is_pod or not _ship.is_hostile_to(other):
 			continue
-		if _ship.global_position.distance_to(other.global_position) > detection_range \
-				or not _in_territory(other):
+		if not _in_territory(other) or (territory_radius == INF
+				and _ship.global_position.distance_to(other.global_position) > detection_range):
 			continue
 		var score := _score(other, attackers)
 		if score < best_score:
@@ -165,11 +168,17 @@ func _score(target: Ship, attackers: Dictionary[Ship, int]) -> float:
 	var score := _ship.global_position.distance_to(target.global_position)
 	# Any armed ship in range beats every unarmed one.
 	if not target.is_armed():
-		score += detection_range * 2.0
+		score += _reach() * 2.0
 	# Others have it covered: any armed target in range that is not crowded comes first.
 	if attackers.get(target, 0) >= max_attackers:
-		score += detection_range
+		score += _reach()
 	return score
+
+
+## How much the distances to two of its targets can differ: detection range, or the territory's
+## width if that is more. The score penalties are this big, so they outweigh any such difference.
+func _reach() -> float:
+	return detection_range if territory_radius == INF else maxf(detection_range, 2.0 * territory_radius)
 
 
 ## How many other fighters out in space attack each ship right now.

@@ -92,7 +92,13 @@ func in_range(target: Variant) -> bool:
 func hit_chance_against(target: Ship) -> float:
 	if not in_range(target):
 		return 0.0
-	return hit_chance * distance_share(_gap_to(target)) * size_share(target)
+	return hit_chance_at(_gap_to(target), target)
+
+
+## Chance that a shot at `target` would hit from `gap` meters between hulls: a forecast for a
+## distance the ships are not at yet (0 beyond max_range).
+func hit_chance_at(gap: float, target: Ship) -> float:
+	return hit_chance * distance_share(gap) * size_share(target)
 
 
 ## Share of the hit chance left at `gap` meters between hulls.

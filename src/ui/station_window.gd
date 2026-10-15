@@ -3,7 +3,8 @@ extends PanelContainer
 
 ## Shown while the player's ship is docked: the ship's state and what the station offers
 ## (StationServices): sell the cargo, repair the armor, buy modules, upgrade to the next class,
-## board another of the player's ships docked here, undock. Hides itself once the ship is out.
+## buy a new ship, board another of the player's ships docked here, undock. Hides itself once the
+## ship is out.
 
 var controller: PlayerController
 
@@ -18,6 +19,10 @@ var _upgrade: Button
 var _module_buttons := {}
 ## Module type -> its title.
 var _module_titles := {}
+## Ship scene for sale -> its buy button.
+var _ship_buttons := {}
+## Ship scene for sale -> its title.
+var _ship_titles := {}
 var _ships_title: Label
 var _ships: GridContainer
 var _undock: Button
@@ -50,6 +55,11 @@ func _ready() -> void:
 		probe.free()
 		_module_buttons[type] = _add_button(column, controller.buy_module.bind(type))
 	_upgrade = _add_button(column, controller.upgrade_ship)
+	for scene in StationServices.ships():
+		var probe := scene.instantiate() as Ship
+		_ship_titles[scene] = probe.get_title()
+		probe.free()
+		_ship_buttons[scene] = _add_button(column, controller.buy_ship.bind(scene))
 	_ships_title = Label.new()
 	_ships_title.text = "Your ships here"
 	column.add_child(_ships_title)
@@ -91,6 +101,10 @@ func _process(_delta: float) -> void:
 	else:
 		_upgrade.text = "Upgrade to %s: %d cr" % [ShipClass.name_of(next), StationServices.upgrade_price(ship)]
 	_upgrade.disabled = not StationServices.can_upgrade(ship, credits)
+	for scene: PackedScene in _ship_buttons:
+		var button: Button = _ship_buttons[scene]
+		button.text = "Buy %s: %d cr" % [_ship_titles[scene], StationServices.ship_price(scene)]
+		button.disabled = not StationServices.can_buy_ship(scene, credits)
 
 	_update_ships()
 	_undock.text = "Undocking: waiting for the port..." if controller.is_undocking() else "Undock"

@@ -1,0 +1,2 @@
+- [Fragile areas](fragile-areas.md) — garrison queue sharing, event finish paths, UI thresholds, HUD layout vs canvas aspect
+- [Testing tips](testing-tips.md) — scratch probes, headless window 1152x1152, flaky chaos coverage, main session edits concurrently

@@ -1,6 +1,78 @@
 # Playtest notes
 
-What playtests showed, newest first. Decisions that follow go into `concept.md`.
+What playtests showed, newest first. Decisions that follow go into `concept.md`. Full reports
+are kept verbatim in `docs/playtests/`.
+
+## 2026-10-14: the first 30 minutes, blind
+
+Report: `docs/playtests/2026-10-14-first-30-minutes.md` (Claude, no docs read, fourth milestone
+build, fights slowed to x0.05-x0.5). The first ~10 minutes worked: controls learned from the HUD,
+a hold mined and sold, a pirate killed, a module bought. Then a raid of one medium and three small
+pirates camped the field for the rest of the session: nobody in the system could clear it, the
+mining ship was lost and the station sold none, and the only move left was waiting docked at x8.
+The best moment: breaking off a losing fight on the afterburner as "It hits you" dropped to zero.
+
+Against the fourth milestone's success line (game-designer): the player read the hit numbers all
+the time and used the afterburner to break a distance, but never to take one, never mentioned
+Z / X and won no fight thanks to a decision. The only winnable fight was same-class (distance
+changes nothing there) and the raid was 1 against 4. "The medium holds the range where it hits and
+I do not" is true at 350 m and flips at 100 m (85% against ~30%), but nothing on screen showed
+what closing in would change. So: not refuted, not yet tested.
+
+Why it became a wall: raiders stay until destroyed (fourth milestone), the two patrols are never
+replaced and the garrison only answers invasions, so a raid with a medium could never be cleared;
+the pod gives a combat ship, and nothing sold a mining ship.
+
+Measured (systems designer, headless, 8 runs a row, on the playtested build):
+- A small ship against one medium pirate works as the concept says: on the default Attack it
+  wins 6 of 8 (8 of 8 with Z to 50 m or the booster), and the medium spends 2% of the fight in its
+  band: the faster small ship always gets close. Kept at 350 m it loses 8 of 8, with the same trade
+  as the report (about 0.6 damage dealt per damage taken). No class or weapon numbers change.
+- "It holds 350-425 m" comes from fighting 4 against 1: while the player's ship circles a small
+  pirate, the medium circles the player at 350 m (59% of the time in its band), and the player's
+  gun only fires at the ordered target. A cue for "the one hurting you is not your target" may
+  be needed if the forecast does not do it (watch in the next playtest).
+- The real wall is numbers: a lone small ship, even with both modules, loses 8 of 8 against every
+  raid the game rolls (2-3 small, 30% with a medium), mostly without a kill; a medium player ship
+  does no better. The two patrols clear raids without a medium and lose to the ones with one.
+  With a squad of 2 small and 1 medium (indicative, simplified allies): the squad alone clears
+  medium + 2 small 5 of 8 and medium + 3 small 0 of 8; squad and player together win 6 of 8
+  against the biggest raid. So raid sizes stay: the biggest raids need the player.
+- The squad as built, measured on the real home system (systems designer, ~200 runs): no squad
+  got stuck or came home with raiders left. The first numbers (2 small and 1 medium after 3
+  minutes) were too weak: the patrols die in the first raid with a medium and are never replaced,
+  and after that an unfought raid held the field 9-17 minutes. Taken: 3 small and 1 medium after
+  2 minutes, so the first squad clears most raids in 3-3.5 minutes and the biggest one with the
+  player (8 of 8, the player alive, 300-500 cr). Noted: a lost squad leaves almost no progress
+  (the raiders' shields refill before the next one), squad ships leave the port ~10 s apart and
+  meet the raid one by one, the squad's medium is weak against small pirates (see below).
+- Open (for the user): the 1500 cr upgrade to medium loses to a single small pirate (1 of 8
+  without modules, 8 of 8 with both): small pirates sit at ~120 m, where they hit the medium 85%
+  and it hits them 37%. Raising the medium's close-range share from 0.2 to 0.35 would make it 4 of
+  8, at the cost of the small ship's duel (6 to 5 of 8). Not changed yet.
+
+Decision (producer and game-designer; where they differed, the game-designer's pick was taken):
+- The military answers a raid: the defense station sends a squad after a delay that the raid
+  warning names; another if it is lost. Not taken: raiders leaving on a timer (producer's pick:
+  it makes waiting docked the designed answer, only shorter), fewer raiders while the player flies
+  small (the world would scale to the player).
+- Stations sell a small mining ship for 300 cr. Not taken: the pod getting back the kind of ship
+  it lost (it erases the loss).
+- A forecast of both hit chances at the player's distance (hostile list, target line), so the
+  number teaches "get closer". Not taken: a hint line telling the player to press Z.
+- UI: the hostile list hides while docked and on the map, the alert banner keeps clear of the
+  panels (it covered Undock), screen-sized selection rings are not drawn, the debug panel starts
+  folded, a selected gate says jumps are not in the game yet.
+- Later: active mining, differences between stations, gate jumps.
+- Watch (QA): a squad that leaves while no raider is inside the field docks straight back and the
+  next one waits a full delay (not seen with the default 3 minutes); defenders lost to raiders
+  leave wrecks to loot every few minutes, and the garrison is rebuilt for free; ships bought at a
+  station all read "Mining ship (small)" in the board list.
+- Next playtest in two parts: a sandbox duel against a medium ship (does the player close in
+  unprompted, and win a fight they lose at the default distance?), and the first 30 minutes again
+  (no stretch over ~2 game minutes where waiting is the only move; earning again within ~5 minutes
+  of a ship loss). The duel should be played at x1 by the user: an agent's latency hides whether
+  a fight is interesting at normal speed.
 
 ## 2026-10-14: still flat after "The first hour"
 

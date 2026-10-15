@@ -21,6 +21,7 @@
 [ext_resource type="PackedScene" path="res://src/ships/player_miner.tscn" id="20_player_miner"]
 [ext_resource type="Script" path="res://src/world/pirate_raids.gd" id="21_raids"]
 [ext_resource type="PackedScene" path="res://src/ships/miner_ship.tscn" id="22_miner_ship"]
+[ext_resource type="Script" path="res://src/world/garrison.gd" id="23_garrison"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_sky"]
 shader = ExtResource("1_sky")
@@ -66,6 +67,10 @@ display_name = "Bastion Outpost"
 radius = 180.0
 style = 1
 hull_color = Color(0.42, 0.47, 0.55, 1)
+
+[node name="Garrison" type="Node" parent="Stations/BastionOutpost"]
+script = ExtResource("23_garrison")
+ships_root = NodePath("../../../Ships")
 
 [node name="Gates" type="Node3D" parent="."]
 
@@ -236,4 +241,5 @@ script = ExtResource("21_raids")
 gates = Array[NodePath]([NodePath("../Gates/NorthGate"), NodePath("../Gates/EastGate"), NodePath("../Gates/WestGate")])
 field = NodePath("../AsteroidField")
 ships_root = NodePath("../Ships")
+defense_station = NodePath("../Stations/BastionOutpost")
 debug_panel = NodePath("../DebugPanel")

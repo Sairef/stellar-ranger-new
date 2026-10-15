@@ -2,8 +2,10 @@ class_name StationServices
 extends RefCounted
 
 ## What a station does for a docked ship, for credits (the one galactic currency): buys the
-## cargo, repairs the armor (the shield recharges by itself), sells modules (ShipModule) and
-## upgrades the ship to the next class (ShipClass.next()). Every station offers everything for
+## cargo, repairs the armor (the shield recharges by itself), sells modules (ShipModule),
+## upgrades the ship to the next class (ShipClass.next()) and sells new ships (ships(): for now
+## only a small mining ship, so a pilot who lost theirs can mine again; a pod already gets a free
+## combat ship). Every station offers everything for
 ## now. The caller keeps the money: functions take a budget and return what was earned or spent.
 ##
 ## Prices are placeholders, but their size matters: they are set so that in the first hour a pilot
@@ -22,6 +24,10 @@ const UPGRADE_PRICES := {
 ## Credits for each module (see modules()).
 const AFTERBURNER_PRICE := 400
 const SHIELD_BOOSTER_PRICE := 500
+## Ships for sale (see ships()) and their prices: a lost small miner costs about a module, a
+## setback of a few minutes, not the end of mining.
+const MINING_SHIP := preload("res://src/ships/player_miner.tscn")
+const MINING_SHIP_PRICE := 300
 
 
 ## Credits the hold would fetch.
@@ -98,3 +104,17 @@ static func buy_module(ship: Ship, type: Script, budget: int) -> int:
 		return 0
 	ship.add_child(type.new())
 	return module_price(type)
+
+
+## Ships for sale, as scenes.
+static func ships() -> Array[PackedScene]:
+	return [MINING_SHIP]
+
+
+## Credits for a new ship of `scene`, 0 if it is not for sale.
+static func ship_price(scene: PackedScene) -> int:
+	return MINING_SHIP_PRICE if scene == MINING_SHIP else 0
+
+
+static func can_buy_ship(scene: PackedScene, budget: int) -> bool:
+	return scene in ships() and budget >= ship_price(scene)
